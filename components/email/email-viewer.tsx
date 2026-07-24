@@ -789,6 +789,7 @@ export function EmailViewer({
   const belowHeaderGhostRef = useRef<HTMLDivElement>(null);
   const [imageThumbUrls, setImageThumbUrls] = useState<Record<string, string>>({});
   const [imageGallery, setImageGallery] = useState<{ images: GalleryImage[]; initialIndex: number } | null>(null);
+  const galleryRequestRef = useRef(0);
   const [allowExternalContent, setAllowExternalContent] = useState(false);
   const [hasBlockedContent, setHasBlockedContent] = useState(false);
   const [cidBlobUrls, setCidBlobUrls] = useState<Record<string, string>>({});
@@ -1796,11 +1797,20 @@ export function EmailViewer({
   );
 
   const closeImageGallery = useCallback(() => {
-    imageGallery?.images.forEach((image) => URL.revokeObjectURL(image.url));
-    setImageGallery(null);
-  }, [imageGallery]);
+    galleryRequestRef.current += 1;
+    setImageGallery((current) => {
+      current?.images.forEach((image) => URL.revokeObjectURL(image.url));
+      return null;
+    });
+  }, []);
+
+  // A blob fetch can finish after the reader moved to another message or
+  // dismissed the gallery. Invalidate that pending request so it cannot reopen
+  // the overlay on the next interaction.
+  useEffect(() => closeImageGallery(), [email?.id, closeImageGallery]);
 
   const openImageGallery = useCallback(async (attachment: EffectiveAttachment) => {
+    const requestId = ++galleryRequestRef.current;
     const images = effectiveAttachments.filter((item) => item.type.toLowerCase().startsWith('image/'));
     const initialIndex = images.findIndex((item) => item.id === attachment.id);
     if (initialIndex < 0) return;
@@ -1821,11 +1831,14 @@ export function EmailViewer({
     }));
     const resolvedImages = galleryImages.filter((item): item is GalleryImage => item !== null);
     const resolvedInitialIndex = resolvedImages.findIndex((item) => item.id === attachment.id);
-    if (resolvedInitialIndex < 0) {
+    if (requestId !== galleryRequestRef.current || resolvedInitialIndex < 0) {
       resolvedImages.forEach((item) => URL.revokeObjectURL(item.url));
       return;
     }
-    setImageGallery({ images: resolvedImages, initialIndex: resolvedInitialIndex });
+    setImageGallery((current) => {
+      current?.images.forEach((image) => URL.revokeObjectURL(image.url));
+      return { images: resolvedImages, initialIndex: resolvedInitialIndex };
+    });
   }, [blobAccountId, blobClient, effectiveAttachments]);
 
   const handleEffectiveAttachmentOpen = useCallback(async (attachment: EffectiveAttachment) => {

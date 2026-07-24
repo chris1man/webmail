@@ -32,12 +32,17 @@ export function ImageGallery({ images, initialIndex, onClose }: ImageGalleryProp
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onClose();
+        return;
+      }
       if (event.key === "ArrowLeft") setIndex((current) => (current - 1 + images.length) % images.length);
       if (event.key === "ArrowRight") setIndex((current) => (current + 1) % images.length);
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [images.length, onClose]);
 
   if (!image) return null;
