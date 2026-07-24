@@ -1,0 +1,33 @@
+services:
+  webmail:
+    # Portainer checks out this repository and builds the selected branch on
+    # the server. The local image is then reused by the production cutover.
+    image: local/bulwarkmail-custom:smart-title-gallery
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    volumes:
+      # Isolated state: never mount the production Bulwark volumes here.
+      - bulwark-settings-test:/app/data/settings
+      - bulwark-admin-test:/app/data/admin
+      - bulwark-admin-state-test:/app/data/admin-state
+      - bulwark-telemetry-test:/app/data/telemetry
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  bulwark-settings-test:
+  bulwark-admin-test:
+  bulwark-admin-state-test:
+  bulwark-telemetry-test:
