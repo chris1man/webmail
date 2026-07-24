@@ -10,7 +10,6 @@ import { useCalendarStore } from "@/stores/calendar-store";
 import { Avatar } from "@/components/ui/avatar";
 import { Section } from "./contact-detail";
 import type { ContactCard, Email, CalendarEvent } from "@/lib/jmap/types";
-import { getMessageTitle } from "@/lib/message-title";
 
 const EMAIL_LIMIT = 5;
 const EVENT_LIMIT = 5;
@@ -243,7 +242,7 @@ export function ContactActivity({ contact }: ContactActivityProps) {
                       </span>
                     </div>
                     <div className="text-sm truncate">
-                      {getMessageTitle(email)}
+                      {email.subject || t("no_subject")}
                     </div>
                     {email.preview && (
                       <p className="text-xs text-muted-foreground truncate mt-0.5">

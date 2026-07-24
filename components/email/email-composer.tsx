@@ -13,6 +13,7 @@ import { useContextMenu } from "@/hooks/use-context-menu";
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { sanitizeSignatureHtml, sanitizeSignatureHtmlForDisplay, sanitizeEmailHtml, escapeHtml } from "@/lib/email-sanitization";
 import { buildReplySubject, buildForwardSubject } from "@/lib/subject-prefix";
+import { getOutgoingSubject } from "@/lib/outgoing-subject";
 import { isFilePreviewable } from "@/lib/file-preview";
 import { isEditableEventTarget } from "@/lib/keyboard";
 import { buildQuotedHtmlBlock, serializeEditorContent } from "@/components/email/quoted-html";
@@ -1574,13 +1575,12 @@ export function EmailComposer({
   const toAddresses = expandRecipients(withInput(to, toInput));
   const bodyPlainText = plainTextMode ? body.trim() : htmlToPlainText(body).trim();
   const hasContent = bodyPlainText || attachments.some(att => att.blobId && !att.uploading);
-  const canSend = toAddresses.length > 0 && !!subject && hasContent;
+  const canSend = toAddresses.length > 0 && hasContent;
 
   const getSendTooltip = (): string | undefined => {
     if (isWaitingForUploads) return t('validation.attachments_uploading');
     if (canSend) return undefined;
     if (toAddresses.length === 0) return t('validation.recipient_required');
-    if (!subject) return t('validation.subject_required');
     if (!hasContent) return t('validation.body_required');
     return undefined;
   };
@@ -1706,7 +1706,6 @@ export function EmailComposer({
     if (!canSend) {
       const errors: { to?: boolean; subject?: boolean; body?: boolean } = {};
       if (toAddresses.length === 0) errors.to = true;
-      if (!subject) errors.subject = true;
       if (!hasContent) errors.body = true;
       setValidationErrors(errors);
 
@@ -1827,6 +1826,13 @@ export function EmailComposer({
       ? undefined
       : `<div>${rewritten!.html}</div>${buildSignatureHtml()}`;
     const inlineAttachments = rewritten?.attachments ?? [];
+    const outgoingSubject = getOutgoingSubject({
+      subject,
+      text: plainTextMode ? body : htmlToPlainText(body),
+      attachmentNames: attachmentsRef.current
+        .filter((attachment) => attachment.blobId && !attachment.uploading && !attachment.error)
+        .map((attachment) => attachment.name),
+    });
 
     try {
       const effectiveDelayedUntil = await resolveDelayedUntil(delayedUntil);
@@ -1837,7 +1843,7 @@ export function EmailComposer({
         to: toAddresses.map(r => formatRecipient(r.name, r.email)),
         cc: ccAddresses.map(r => formatRecipient(r.name, r.email)),
         bcc: bccAddresses.map(r => formatRecipient(r.name, r.email)),
-        subject,
+        subject: outgoingSubject,
         htmlBody: finalHtmlBody || '',
         textBody: finalBody,
         identityId: currentIdentity?.id || '',
@@ -1864,7 +1870,7 @@ export function EmailComposer({
         to: toAddresses.map(r => formatRecipient(r.name, r.email)),
         cc: ccAddresses.map(r => formatRecipient(r.name, r.email)),
         bcc: bccAddresses.map(r => formatRecipient(r.name, r.email)),
-        subject,
+        subject: outgoingSubject,
         htmlBody: finalHtmlBody || '',
         textBody: finalBody,
         identityId: currentIdentity?.id || '',
@@ -1902,7 +1908,7 @@ export function EmailComposer({
           to: toAddresses.map(r => formatRecipient(r.name, r.email)),
           cc: ccAddresses.map(r => formatRecipient(r.name, r.email)),
           bcc: bccAddresses.map(r => formatRecipient(r.name, r.email)),
-          subject,
+          subject: outgoingSubject,
           htmlBody: finalHtmlBody || '',
           textBody: finalBody,
           identityId: currentIdentity?.id || '',

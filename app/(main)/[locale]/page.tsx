@@ -77,7 +77,6 @@ import { appLifecycleHooks, uiHooks, routerHooks, toastHooks, emailHooks } from 
 import { emailToReadView } from "@/lib/plugin-projection";
 import { buildQuoteHeader } from "@/lib/quote-header";
 import { buildReplySubject, buildForwardSubject } from "@/lib/subject-prefix";
-import { getMessageTitle } from "@/lib/message-title";
 import { getEffectiveLocale } from '@/i18n/detect-locale';
 import type { QuoteHeader } from "@/lib/plugin-types";
 
@@ -761,7 +760,7 @@ export default function Home() {
       title = `${modeText} - ${appName}`;
     } else if (selectedEmail) {
       // Reading email
-      const subject = getMessageTitle(selectedEmail);
+      const subject = selectedEmail.subject || t('email_viewer.no_subject');
       title = `${subject} - ${appName}`;
     } else if (selectedMailbox && mailboxes.length > 0) {
       // Mailbox view
@@ -2465,7 +2464,7 @@ export default function Home() {
     const result = await sendEmail(
       client,
       [sender.email],
-      buildReplySubject(getMessageTitle(selectedEmail), t('email_composer.prefix.reply')),
+      buildReplySubject(selectedEmail.subject || "(no subject)", t('email_composer.prefix.reply')),
       finalBody,
       undefined,
       undefined,
@@ -3189,7 +3188,7 @@ export default function Home() {
                     accountId: email.accountId ?? '',
                     emailId: email.id,
                     mailboxId: selectedMailbox,
-                    title: getMessageTitle(email),
+                    title: email.subject?.trim() || t('email_composer.new_message'),
                   });
                 }) : undefined}
                 onOpenConversation={handleOpenConversation}

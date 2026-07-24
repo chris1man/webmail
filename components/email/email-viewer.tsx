@@ -102,7 +102,6 @@ import { emailHooks, uiHooks, renderHooks } from "@/lib/plugin-hooks";
 import type { AttachmentInfo, AttachmentPreview } from "@/lib/plugin-types";
 import { useAttachmentDrag, isDragOutSupported, type AttachmentDragSource } from "@/hooks/use-attachment-drag";
 import type { IJMAPClient } from "@/lib/jmap/client-interface";
-import { getMessageTitle } from "@/lib/message-title";
 import { ImageGallery, type GalleryImage } from "./image-gallery";
 
 interface EmailViewerProps {
@@ -2566,7 +2565,7 @@ export function EmailViewer({
       r.name ? `${escapeHtml(r.name)} &lt;${escapeHtml(r.email)}&gt;` : escapeHtml(r.email);
     const toList = email.to?.map(formatRecipient).join(', ') || '';
     const ccList = email.cc?.map(formatRecipient).join(', ') || '';
-    const subjectText = getMessageTitle(email);
+    const subjectText = email.subject || t('no_subject');
     const senderText = printSender?.name
       ? `${printSender.name} <${printSender.email}>`
       : printSender?.email || t('unknown_sender');
@@ -3630,7 +3629,7 @@ export function EmailViewer({
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-2">
                 <h1 className="text-lg lg:text-xl font-bold text-foreground tracking-tight break-words min-w-0">
-                  {getMessageTitle(email)}
+                  {email.subject || t('no_subject')}
                 </h1>
                 {/* Star inline with subject (top toolbar mode) */}
                 {toolbarPosition === 'top' && (
@@ -4335,7 +4334,7 @@ export function EmailViewer({
                   <SectionHeader>{t('details.message_properties')}</SectionHeader>
                   <dl className="grid grid-cols-[7rem_1fr] gap-x-4 gap-y-1.5">
                     {email.subject !== undefined && (
-                      <Row label={t('subject')}>{getMessageTitle(email)}</Row>
+                      <Row label={t('subject')}>{email.subject || <span className="italic text-muted-foreground">{t('details.no_subject')}</span>}</Row>
                     )}
                     <Row label={t('details.size')}>
                       {formatFileSize(email.size)}

@@ -35,7 +35,6 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useContactStore } from "@/stores/contact-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { isFilePreviewable } from "@/lib/file-preview";
-import { getMessageTitle } from "@/lib/message-title";
 import { ImageGallery, type GalleryImage } from "./image-gallery";
 
 interface ThreadConversationViewProps {
@@ -159,7 +158,7 @@ export function ThreadConversationView({
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="font-semibold text-foreground break-words">
-            {getMessageTitle(thread.latestEmail)}
+            {thread.latestEmail.subject || t("email_viewer.no_subject")}
           </h1>
           <p className="text-sm text-muted-foreground">
             {t("threads.messages_other", { count: emails.length })}
