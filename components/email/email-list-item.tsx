@@ -16,6 +16,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { EmailIdentityBadge } from "./email-identity-badge";
 import { EmailHoverActions } from "./email-hover-actions";
 import { getEmailColorTags } from "@/lib/thread-utils";
+import { getMessageTitle } from "@/lib/message-title";
 
 interface EmailListItemProps {
   email: Email;
@@ -211,7 +212,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
                     'min-w-0 truncate',
                     isUnread ? 'font-semibold text-foreground' : 'text-foreground/90'
                   )}>
-                    {email.subject || t('no_subject')}
+                    {getMessageTitle(email)}
                   </span>
                   {inlinePreview && (
                     <span className="min-w-0 shrink-[9999] truncate text-muted-foreground">{inlinePreview}</span>
@@ -313,7 +314,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
                   ? "font-semibold text-foreground"
                   : "font-normal text-foreground/90"
               )}>
-                {email.subject || t('no_subject')}
+                {getMessageTitle(email)}
               </div>
 
               {/* Third Line: Preview (controlled by showPreview setting) */}

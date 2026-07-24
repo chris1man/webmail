@@ -16,6 +16,7 @@ import { useLongPress } from "@/hooks/use-long-press";
 import { ThreadEmailItem } from "./thread-email-item";
 import { EmailHoverActions } from "./email-hover-actions";
 import { useTranslations } from "next-intl";
+import { getMessageTitle } from "@/lib/message-title";
 
 /**
  * Small chip showing the originating folder of a message, rendered in the
@@ -262,7 +263,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                       'min-w-0 truncate',
                       isUnread ? 'font-semibold text-foreground' : 'text-foreground/90'
                     )}>
-                      {email.subject || '(no subject)'}
+                      {getMessageTitle(email)}
                     </span>
                     {inlinePreview && (
                       <span className="min-w-0 shrink-[9999] truncate text-muted-foreground">{inlinePreview}</span>
@@ -384,7 +385,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                     ? "font-semibold text-foreground"
                     : "font-normal text-foreground/90"
                 )}>
-                  {email.subject || "(no subject)"}
+                  {getMessageTitle(email)}
                 </div>
 
                 {showPreview && density !== 'extra-compact' && density !== 'compact' && (
@@ -726,7 +727,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                         'min-w-0 truncate',
                         hasUnread ? 'font-semibold text-foreground' : 'text-foreground/90'
                       )}>
-                        {latestEmail.subject || '(no subject)'}
+                        {getMessageTitle(latestEmail)}
                       </span>
                       {inlinePreview && (
                         <span className="min-w-0 shrink-[9999] truncate text-muted-foreground">{inlinePreview}</span>
@@ -860,7 +861,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                       ? "font-semibold text-foreground"
                       : "font-normal text-foreground/90"
                   )}>
-                    {latestEmail.subject || "(no subject)"}
+                    {getMessageTitle(latestEmail)}
                   </div>
 
                   {showPreview && density !== 'extra-compact' && density !== 'compact' && (

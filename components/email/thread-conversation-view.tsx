@@ -35,6 +35,8 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useContactStore } from "@/stores/contact-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { isFilePreviewable } from "@/lib/file-preview";
+import { getMessageTitle } from "@/lib/message-title";
+import { ImageGallery, type GalleryImage } from "./image-gallery";
 
 interface ThreadConversationViewProps {
   thread: ThreadGroup;
@@ -157,7 +159,7 @@ export function ThreadConversationView({
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="font-semibold text-foreground break-words">
-            {thread.latestEmail.subject || t("email_viewer.no_subject")}
+            {getMessageTitle(thread.latestEmail)}
           </h1>
           <p className="text-sm text-muted-foreground">
             {t("threads.messages_other", { count: emails.length })}
@@ -453,6 +455,31 @@ function EmailCard({
   // the host page. CSP <meta> is defense-in-depth in case the sanitizer ever
   // emits a <script> tag through a parser quirk.
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [imageGallery, setImageGallery] = useState<{ images: GalleryImage[]; initialIndex: number } | null>(null);
+
+  const closeImageGallery = useCallback(() => {
+    imageGallery?.images.forEach((image) => URL.revokeObjectURL(image.url));
+    setImageGallery(null);
+  }, [imageGallery]);
+
+  const openImageGallery = useCallback(async (attachmentId: string) => {
+    if (!client) return;
+    const images = (email.attachments ?? []).filter((attachment) => attachment.type.toLowerCase().startsWith('image/'));
+    const resolvedImages = (await Promise.all(images.map(async (attachment): Promise<GalleryImage | null> => {
+      try {
+        const url = await client.fetchBlobAsObjectUrl(attachment.blobId, attachment.name || 'image', attachment.type);
+        return { id: attachment.partId || attachment.blobId, name: attachment.name || 'Image', size: attachment.size, url };
+      } catch {
+        return null;
+      }
+    }))).filter((image): image is GalleryImage => image !== null);
+    const initialIndex = resolvedImages.findIndex((image) => image.id === attachmentId);
+    if (initialIndex < 0) {
+      resolvedImages.forEach((image) => URL.revokeObjectURL(image.url));
+      return;
+    }
+    setImageGallery({ images: resolvedImages, initialIndex });
+  }, [client, email.attachments]);
   const emailIframeSrcDoc = useMemo(() => {
     if (!emailContent.isHtml || !emailContent.html) return '';
     const csp = "default-src 'none'; img-src data: blob: http: https:; style-src 'unsafe-inline'; font-src data: http: https:; media-src data: blob: http: https:; base-uri 'none'; form-action 'none'; frame-src 'none'";
@@ -636,7 +663,11 @@ function EmailCard({
                       key={idx}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDownloadAttachment?.(attachment.blobId, attachment.name || 'attachment', attachment.type);
+                        if (attachment.type.toLowerCase().startsWith('image/')) {
+                          void openImageGallery(attachment.partId || attachment.blobId);
+                        } else {
+                          onDownloadAttachment?.(attachment.blobId, attachment.name || 'attachment', attachment.type);
+                        }
                       }}
                       title={opensPreview ? t('files.preview') : t('email_viewer.download')}
                       className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-sm"
@@ -658,6 +689,8 @@ function EmailCard({
             </div>
             );
           })()}
+
+          {imageGallery && <ImageGallery images={imageGallery.images} initialIndex={imageGallery.initialIndex} onClose={closeImageGallery} />}
 
           {/* Action Buttons */}
           <div className="px-4 pb-4 flex gap-2">

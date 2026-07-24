@@ -102,6 +102,8 @@ import { emailHooks, uiHooks, renderHooks } from "@/lib/plugin-hooks";
 import type { AttachmentInfo, AttachmentPreview } from "@/lib/plugin-types";
 import { useAttachmentDrag, isDragOutSupported, type AttachmentDragSource } from "@/hooks/use-attachment-drag";
 import type { IJMAPClient } from "@/lib/jmap/client-interface";
+import { getMessageTitle } from "@/lib/message-title";
+import { ImageGallery, type GalleryImage } from "./image-gallery";
 
 interface EmailViewerProps {
   email: Email | null;
@@ -787,6 +789,7 @@ export function EmailViewer({
   const belowHeaderRowRef = useRef<HTMLDivElement>(null);
   const belowHeaderGhostRef = useRef<HTMLDivElement>(null);
   const [imageThumbUrls, setImageThumbUrls] = useState<Record<string, string>>({});
+  const [imageGallery, setImageGallery] = useState<{ images: GalleryImage[]; initialIndex: number } | null>(null);
   const [allowExternalContent, setAllowExternalContent] = useState(false);
   const [hasBlockedContent, setHasBlockedContent] = useState(false);
   const [cidBlobUrls, setCidBlobUrls] = useState<Record<string, string>>({});
@@ -1793,7 +1796,44 @@ export function EmailViewer({
     [email, attachmentFilenameOptions],
   );
 
+  const closeImageGallery = useCallback(() => {
+    imageGallery?.images.forEach((image) => URL.revokeObjectURL(image.url));
+    setImageGallery(null);
+  }, [imageGallery]);
+
+  const openImageGallery = useCallback(async (attachment: EffectiveAttachment) => {
+    const images = effectiveAttachments.filter((item) => item.type.toLowerCase().startsWith('image/'));
+    const initialIndex = images.findIndex((item) => item.id === attachment.id);
+    if (initialIndex < 0) return;
+
+    const galleryImages = await Promise.all(images.map(async (item): Promise<GalleryImage | null> => {
+      try {
+        if (item.blobId && blobClient) {
+          const url = await blobClient.fetchBlobAsObjectUrl(item.blobId, item.name || 'image', item.type, blobAccountId);
+          return { id: item.id, name: item.name || 'Image', size: item.size, url };
+        }
+        const bytes = item.tnefData ?? (item.decryptedAttachment ? getAttachmentContentBytes(item.decryptedAttachment) : null);
+        if (!bytes) return null;
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        return { id: item.id, name: item.name || 'Image', size: item.size, url: URL.createObjectURL(new Blob([buffer], { type: item.type })) };
+      } catch {
+        return null;
+      }
+    }));
+    const resolvedImages = galleryImages.filter((item): item is GalleryImage => item !== null);
+    const resolvedInitialIndex = resolvedImages.findIndex((item) => item.id === attachment.id);
+    if (resolvedInitialIndex < 0) {
+      resolvedImages.forEach((item) => URL.revokeObjectURL(item.url));
+      return;
+    }
+    setImageGallery({ images: resolvedImages, initialIndex: resolvedInitialIndex });
+  }, [blobAccountId, blobClient, effectiveAttachments]);
+
   const handleEffectiveAttachmentOpen = useCallback(async (attachment: EffectiveAttachment) => {
+    if (attachment.type.toLowerCase().startsWith('image/')) {
+      await openImageGallery(attachment);
+      return;
+    }
     const isPreviewable = isFilePreviewable(attachment.name || undefined, attachment.type);
     // Blob URLs inherit our origin; script-bearing MIME types (text/html,
     // image/svg+xml, etc.) would execute as the webmail origin if opened
@@ -1871,7 +1911,7 @@ export function EmailViewer({
     }
 
     setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-  }, [mailAttachmentAction, onDownloadAttachment, email, resolveAttachmentName]);
+  }, [mailAttachmentAction, onDownloadAttachment, email, resolveAttachmentName, openImageGallery]);
 
   const handleEffectiveAttachmentDownload = useCallback((attachment: EffectiveAttachment) => {
     const downloadName = resolveAttachmentName(attachment);
@@ -2526,7 +2566,7 @@ export function EmailViewer({
       r.name ? `${escapeHtml(r.name)} &lt;${escapeHtml(r.email)}&gt;` : escapeHtml(r.email);
     const toList = email.to?.map(formatRecipient).join(', ') || '';
     const ccList = email.cc?.map(formatRecipient).join(', ') || '';
-    const subjectText = email.subject || t('no_subject');
+    const subjectText = getMessageTitle(email);
     const senderText = printSender?.name
       ? `${printSender.name} <${printSender.email}>`
       : printSender?.email || t('unknown_sender');
@@ -3590,7 +3630,7 @@ export function EmailViewer({
             <div className="flex-1 min-w-0">
               <div className="flex items-start gap-2">
                 <h1 className="text-lg lg:text-xl font-bold text-foreground tracking-tight break-words min-w-0">
-                  {email.subject || t('no_subject')}
+                  {getMessageTitle(email)}
                 </h1>
                 {/* Star inline with subject (top toolbar mode) */}
                 {toolbarPosition === 'top' && (
@@ -4295,7 +4335,7 @@ export function EmailViewer({
                   <SectionHeader>{t('details.message_properties')}</SectionHeader>
                   <dl className="grid grid-cols-[7rem_1fr] gap-x-4 gap-y-1.5">
                     {email.subject !== undefined && (
-                      <Row label={t('subject')}>{email.subject || <span className="italic text-muted-foreground">{t('details.no_subject')}</span>}</Row>
+                      <Row label={t('subject')}>{getMessageTitle(email)}</Row>
                     )}
                     <Row label={t('details.size')}>
                       {formatFileSize(email.size)}
@@ -5164,6 +5204,14 @@ export function EmailViewer({
             toast.success('Contact added');
           }
         }}
+      />
+    )}
+
+    {imageGallery && (
+      <ImageGallery
+        images={imageGallery.images}
+        initialIndex={imageGallery.initialIndex}
+        onClose={closeImageGallery}
       />
     )}
 
