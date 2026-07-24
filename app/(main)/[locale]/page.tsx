@@ -1360,6 +1360,10 @@ export default function Home() {
     setPendingDraft(null);
   }, []);
 
+  const handleComposeToRecipient = useCallback((recipient: string) => {
+    openMailtoDraft({ to: [recipient], cc: [], bcc: [], subject: '', body: '' });
+  }, [openMailtoDraft]);
+
   const handleReply = async (draftText?: string) => {
     if (selectedEmail) {
       const ok = await emailHooks.onBeforeReply.intercept({
@@ -3492,6 +3496,7 @@ export default function Home() {
                       setComposerMode('compose');
                       setShowComposer(true);
                     }}
+                    onComposeToRecipient={handleComposeToRecipient}
                     currentUserEmail={client?.getUsername()}
                     currentUserName={client?.getUsername()?.split("@")[0]}
                     currentMailboxRole={mailboxes.find(m => m.id === selectedMailbox)?.role ?? (isUnifiedView ? (unifiedRole ?? undefined) : undefined)}

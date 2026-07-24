@@ -129,6 +129,7 @@ interface EmailViewerProps {
   onCancelScheduledForEdit?: () => void;
   onRescheduleScheduled?: (delayedUntil: string) => void;
   onCompose?: () => void;
+  onComposeToRecipient?: (email: string) => void;
   currentUserEmail?: string;
   currentUserName?: string;
   currentMailboxRole?: string;
@@ -325,6 +326,7 @@ function renderClickableRecipients(
   currentUserEmail: string | undefined,
   t: (key: string, params?: Record<string, string | number>) => string,
   onViewContact?: (contact: ContactCard | null, email: string) => void,
+  onComposeToRecipient?: (email: string) => void,
   maxVisible: number = 2
 ) {
   const visible = recipients.slice(0, maxVisible);
@@ -341,6 +343,7 @@ function renderClickableRecipients(
           email={r.email}
           displayLabel={isMe ? t('recipient_me') : undefined}
           onViewContact={onViewContact}
+          onComposeToRecipient={onComposeToRecipient}
           className="text-sm"
         />
       </span>
@@ -641,6 +644,7 @@ export function EmailViewer({
   onCancelScheduledForEdit,
   onRescheduleScheduled,
   onCompose,
+  onComposeToRecipient,
   currentUserEmail,
   currentUserName,
   currentMailboxRole,
@@ -3733,6 +3737,7 @@ export function EmailViewer({
                         name={sender?.name}
                         email={sender.email}
                         onViewContact={handleViewContactSidebar}
+                        onComposeToRecipient={onComposeToRecipient}
                         className="font-semibold text-start"
                       />
                     ) : (
@@ -3755,7 +3760,13 @@ export function EmailViewer({
                   </div>
                   {/* Email address under name */}
                   {sender?.email && sender?.name && (
-                    <div className="text-sm text-muted-foreground mt-0.5 truncate">{sender.email}</div>
+                    <button
+                      type="button"
+                      onClick={() => onComposeToRecipient?.(sender.email)}
+                      className="mt-0.5 block max-w-full truncate text-sm text-muted-foreground hover:text-primary hover:underline"
+                    >
+                      {sender.email}
+                    </button>
                   )}
                 </div>
               </div>
@@ -3765,7 +3776,7 @@ export function EmailViewer({
                 {email.to && email.to.length > 0 && (
                   <>
                     <span>{t('recipient_to_prefix')}</span>
-                    {renderClickableRecipients(email.to, currentUserEmail, t, handleViewContactSidebar)}
+                    {renderClickableRecipients(email.to, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient)}
                     {email.to.length > 2 && (
                       <button
                         onClick={() => setShowFullHeaders(!showFullHeaders)}
@@ -3780,7 +3791,7 @@ export function EmailViewer({
                   <>
                     <span className="text-muted-foreground/50">|</span>
                     <span>CC:</span>
-                    {renderClickableRecipients(email.cc, currentUserEmail, t, handleViewContactSidebar)}
+                    {renderClickableRecipients(email.cc, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient)}
                     {email.cc.length > 2 && (
                       <span className="text-muted-foreground">+{email.cc.length - 2}</span>
                     )}
@@ -3790,7 +3801,7 @@ export function EmailViewer({
                   <>
                     <span className="text-muted-foreground/50">|</span>
                     <span>{t('bcc')}:</span>
-                    {renderClickableRecipients(email.bcc, currentUserEmail, t, handleViewContactSidebar)}
+                    {renderClickableRecipients(email.bcc, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient)}
                     {email.bcc.length > 2 && (
                       <span className="text-muted-foreground">+{email.bcc.length - 2}</span>
                     )}
@@ -4010,14 +4021,14 @@ export function EmailViewer({
                 {email.to && email.to.length > 0 && (
                   <>
                     <span>→ {t('recipient_to_prefix')}</span>
-                    {renderClickableRecipients(email.to, currentUserEmail, t, handleViewContactSidebar)}
+                    {renderClickableRecipients(email.to, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient)}
                   </>
                 )}
                 {email.cc && email.cc.length > 0 && (
                   <>
                     <span className="text-muted-foreground/50">|</span>
                     <span>CC:</span>
-                    {renderClickableRecipients(email.cc, currentUserEmail, t, handleViewContactSidebar)}
+                    {renderClickableRecipients(email.cc, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient)}
                     {email.cc.length > 2 && (
                       <span>+{email.cc.length - 2}</span>
                     )}
@@ -4190,21 +4201,21 @@ export function EmailViewer({
                     {email.to && email.to.length > 0 && (
                       <Row label={t('to')}>
                         <div className="flex flex-wrap items-center gap-1">
-                          {renderClickableRecipients(email.to, currentUserEmail, t, handleViewContactSidebar, 100)}
+                          {renderClickableRecipients(email.to, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient, 100)}
                         </div>
                       </Row>
                     )}
                     {email.cc && email.cc.length > 0 && (
                       <Row label={t('cc')}>
                         <div className="flex flex-wrap items-center gap-1">
-                          {renderClickableRecipients(email.cc, currentUserEmail, t, handleViewContactSidebar, 100)}
+                          {renderClickableRecipients(email.cc, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient, 100)}
                         </div>
                       </Row>
                     )}
                     {email.bcc && email.bcc.length > 0 && (
                       <Row label={t('bcc')}>
                         <div className="flex flex-wrap items-center gap-1">
-                          {renderClickableRecipients(email.bcc, currentUserEmail, t, handleViewContactSidebar, 100)}
+                          {renderClickableRecipients(email.bcc, currentUserEmail, t, handleViewContactSidebar, onComposeToRecipient, 100)}
                         </div>
                       </Row>
                     )}

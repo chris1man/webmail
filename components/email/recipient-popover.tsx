@@ -16,10 +16,12 @@ interface RecipientPopoverProps {
   displayLabel?: string;
   /** Called when user clicks "View contact" - receives the contact and email */
   onViewContact?: (contact: ContactCard | null, email: string) => void;
+  /** Opens the webmail composer with this address prefilled. */
+  onComposeToRecipient?: (email: string) => void;
   className?: string;
 }
 
-export function RecipientPopover({ name, email, displayLabel, onViewContact, className }: RecipientPopoverProps) {
+export function RecipientPopover({ name, email, displayLabel, onViewContact, onComposeToRecipient, className }: RecipientPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -125,6 +127,11 @@ export function RecipientPopover({ name, email, displayLabel, onViewContact, cla
     }
   };
 
+  const handleCompose = () => {
+    onComposeToRecipient?.(email);
+    handleClose();
+  };
+
   return (
     <>
       <button
@@ -210,14 +217,14 @@ export function RecipientPopover({ name, email, displayLabel, onViewContact, cla
                 <Copy className="w-3.5 h-3.5" />
                 Copy
               </button>
-              <a
-                href={`mailto:${email}`}
+              <button
+                onClick={handleCompose}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded hover:bg-muted transition-colors"
                 title="Send email"
               >
                 <Send className="w-3.5 h-3.5" />
                 Email
-              </a>
+              </button>
               {onViewContact && (
                 <button
                   onClick={handleViewContact}
