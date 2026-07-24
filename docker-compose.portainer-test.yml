@@ -1,12 +1,7 @@
 services:
   webmail:
-    # Portainer checks out this repository and builds the selected branch on
-    # the server. The local image is then reused by the production cutover.
-    image: local/bulwarkmail-custom:smart-title-gallery
-    pull_policy: build
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # Built by GitHub Actions; Portainer only pulls the finished image.
+    image: ghcr.io/chris1man/webmail:smart-title-gallery
     ports:
       - "3001:3000"
     environment:
