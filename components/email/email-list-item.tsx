@@ -6,7 +6,7 @@ import { formatDate, stripInvisibleLeading } from "@/lib/utils";
 import { Email } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { SelectableAvatar } from "@/components/email/selectable-avatar";
-import { Paperclip, Star, Pin, Circle, CheckSquare, Square, Reply, Forward } from "lucide-react";
+import { Paperclip, Star, Pin, CheckSquare, Square, Reply, Forward } from "lucide-react";
 import { useEmailStore } from "@/stores/email-store";
 import { useSettingsStore, KEYWORD_PALETTE } from "@/stores/settings-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -174,25 +174,44 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
           </button>
         )}
 
-        {/* Unread indicator */}
-        {isUnread && (
-          <div className="absolute start-0.5 top-1/2 -translate-y-1/2">
-            <Circle className="w-2 h-2 fill-unread text-unread" />
-          </div>
-        )}
-
         {/* Avatar */}
         {density !== 'extra-compact' && (
-          <SelectableAvatar
-            name={sender?.name}
-            email={sender?.email}
-            size={isFocusedMailLayout ? "sm" : "md"}
-            className="flex-shrink-0 shadow-sm"
-            disableImages={hideJunkAvatarImages}
-            checked={isChecked}
-            onToggle={() => toggleEmailSelection(email.id)}
-            selectLabel={tBatch('select')}
-          />
+          <div className="group/unread-toggle relative flex shrink-0">
+            <SelectableAvatar
+              name={sender?.name}
+              email={sender?.email}
+              size={isFocusedMailLayout ? "sm" : "md"}
+              className="shadow-sm"
+              disableImages={hideJunkAvatarImages}
+              checked={isChecked}
+              onToggle={() => toggleEmailSelection(email.id)}
+              selectLabel={tBatch('select')}
+            />
+            {onMarkAsRead && (
+              <button
+                type="button"
+                className={cn(
+                  "absolute start-1/2 top-full z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isUnread
+                    ? "opacity-100"
+                    : "opacity-0 transition-opacity group-hover/unread-toggle:opacity-100 group-focus-within/unread-toggle:opacity-100"
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkAsRead(!isUnread);
+                }}
+                aria-label={isUnread ? t('mark_read') : t('mark_unread')}
+                title={isUnread ? t('mark_read') : t('mark_unread')}
+              >
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 rounded-full",
+                    isUnread ? "bg-unread" : "border border-unread bg-background"
+                  )}
+                />
+              </button>
+            )}
+          </div>
         )}
 
         {/* Content */}
