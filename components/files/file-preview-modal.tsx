@@ -8,10 +8,9 @@ import { getFilePreviewKind, isMimeTypeSafeForInlinePreview } from "@/lib/file-p
 import dynamic from "next/dynamic";
 import { EmlPreview, type ParsedEml } from "@/components/files/eml-preview";
 
-// pdf.js-based inline viewer for mobile (no native inline PDF viewer). Loaded
-// only on the mobile PDF path so pdfjs-dist + its worker never reach the
-// desktop bundle.
-const PdfMobileViewer = dynamic(
+// Use PDF.js everywhere. Browser-native PDF viewers vary considerably and can
+// silently fail for valid mail attachments that use less common PDF features.
+const PdfViewer = dynamic(
   () => import("@/components/files/pdf-mobile-viewer").then((m) => m.PdfMobileViewer),
   { ssr: false },
 );
@@ -149,31 +148,11 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [resolvedFileType, setResolvedFileType] = useState(() => getFilePreviewKind(name));
-  const [pdfInlineSupported, setPdfInlineSupported] = useState(true);
   // Whether the resolved blob MIME is inert enough to open as a top-level
   // navigation. Blob URLs inherit our origin, so opening a script-bearing type
   // (text/html, image/svg+xml, ...) in a new tab would execute it in-origin.
   const [canOpenInNewTab, setCanOpenInNewTab] = useState(false);
   const [emlContent, setEmlContent] = useState<ParsedEml | null>(null);
-
-  // Decide whether to render the PDF in a plain <iframe> (desktop) or with the
-  // pdf.js canvas viewer (mobile). navigator.pdfViewerEnabled is the standard
-  // signal and correctly reports false on Android Chrome (no inline viewer).
-  // iOS Safari is the exception: it reports true (it can show PDFs on top-frame
-  // navigation) yet renders only the FIRST page inside an <iframe> - a
-  // long-standing WebKit limitation - so it must use pdf.js too. Detect iOS
-  // (incl. iPadOS, which spoofs a "Macintosh" UA but exposes touch points).
-  useEffect(() => {
-    const nav = navigator as Navigator & { pdfViewerEnabled?: boolean };
-    const isIOS =
-      /iPad|iPhone|iPod/.test(nav.userAgent) ||
-      (nav.maxTouchPoints > 1 && /Macintosh/.test(nav.userAgent));
-    if (isIOS) {
-      setPdfInlineSupported(false);
-    } else if (typeof nav.pdfViewerEnabled === "boolean") {
-      setPdfInlineSupported(nav.pdfViewerEnabled);
-    }
-  }, []);
 
   // Keep the latest onClose for the back-button handler without re-subscribing.
   const onCloseRef = useRef(onClose);
@@ -219,7 +198,7 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
         if (cancelled) return;
 
         const previewType = getFilePreviewKind(name, contentType || blob.type);
-  setResolvedFileType(previewType);
+        setResolvedFileType(previewType);
 
         if (previewType === "text" || previewType === "markdown") {
           const text = await blob.text();
@@ -230,6 +209,16 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
           const { default: PostalMime } = await import("postal-mime");
           const parsed = await new PostalMime().parse(await blob.arrayBuffer());
           if (!cancelled) setEmlContent(parsed as ParsedEml);
+        } else if (previewType === "office") {
+          const conversionForm = new FormData();
+          conversionForm.set("file", blob, name);
+          const conversion = await fetch("/api/document-preview", {
+            method: "POST",
+            body: conversionForm,
+          });
+          if (!conversion.ok) throw new Error("Document conversion failed");
+          revokeUrl = URL.createObjectURL(await conversion.blob());
+          if (!cancelled) setObjectUrl(revokeUrl);
         } else {
           // Stalwart's download endpoint can return generic
           // application/octet-stream for attachments even when the email's
@@ -362,28 +351,12 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
           />
         )}
 
-        {!loading && !error && fileType === "pdf" && objectUrl && pdfInlineSupported && (
-          // <iframe> renders PDFs reliably across desktop Chromium, Firefox,
-          // and Safari from a blob: URL. <object> was prone to falling back to
-          // a silent download when the blob's Content-Type wasn't recognised.
-          <iframe
-            src={objectUrl}
-            className="w-full max-w-5xl h-full rounded-lg bg-white"
-            title={name}
-            onClick={(e) => e.stopPropagation()}
-          />
-        )}
-
-        {!loading && !error && fileType === "pdf" && objectUrl && !pdfInlineSupported && (
-          // Mobile browsers can't show a PDF inline in an <iframe> (Android: a
-          // blank frame / silent download; iOS: only the first page), so render
-          // it with pdf.js (canvas) instead. The header's open-in-new-tab /
-          // download actions are the fallback if pdf.js can't render the doc.
+        {!loading && !error && (fileType === "pdf" || fileType === "office") && objectUrl && (
           <div
             className="w-full max-w-3xl h-full overflow-auto rounded-lg bg-neutral-200 dark:bg-neutral-800 p-2"
             onClick={(e) => e.stopPropagation()}
           >
-            <PdfMobileViewer url={objectUrl} />
+            <PdfViewer url={objectUrl} />
           </div>
         )}
 

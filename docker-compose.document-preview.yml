@@ -1,0 +1,16 @@
+services:
+  document-preview:
+    # LibreOffice + PDF conversion API. It is intentionally internal-only:
+    # no ports are published and webmail reaches it over proxy-network.
+    image: gotenberg/gotenberg:8
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    external: true

@@ -1,4 +1,4 @@
-export type FilePreviewKind = 'image' | 'html' | 'eml' | 'text' | 'markdown' | 'pdf' | 'audio' | 'video' | 'unsupported';
+export type FilePreviewKind = 'image' | 'html' | 'eml' | 'text' | 'markdown' | 'pdf' | 'office' | 'audio' | 'video' | 'unsupported';
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus']);
@@ -15,6 +15,11 @@ const TEXT_MIME_TYPES = new Set([
   'application/javascript',
   'application/x-javascript',
   'application/typescript',
+]);
+const OFFICE_EXTENSIONS = new Set([
+  'doc', 'docx', 'docm', 'dot', 'dotx', 'odt', 'rtf',
+  'xls', 'xlsx', 'xlsm', 'xlsb', 'xlt', 'xltx', 'ods', 'csv',
+  'ppt', 'pptx', 'pptm', 'pot', 'potx', 'odp',
 ]);
 
 function normalizeMimeType(type?: string): string {
@@ -46,6 +51,10 @@ export function getFilePreviewKind(name?: string, type?: string): FilePreviewKin
 
   if (mimeType === 'application/pdf' || ext === 'pdf') {
     return 'pdf';
+  }
+
+  if (OFFICE_EXTENSIONS.has(ext)) {
+    return 'office';
   }
 
   if (mimeType.startsWith('audio/') || AUDIO_EXTENSIONS.has(ext)) {

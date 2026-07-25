@@ -19,8 +19,12 @@ describe('file preview detection', () => {
     expect(getFilePreviewKind('payload.json', 'application/json')).toBe('text');
   });
 
-  it('detects pdf, audio, and video attachments', () => {
+  it('detects pdf, Office, audio, and video attachments', () => {
     expect(getFilePreviewKind('doc.pdf')).toBe('pdf');
+    expect(getFilePreviewKind('invoice.docx')).toBe('office');
+    expect(getFilePreviewKind('report.xlsx', 'application/octet-stream')).toBe('office');
+    expect(getFilePreviewKind('slides.pptx')).toBe('office');
+    expect(isFilePreviewable('table.ods')).toBe(true);
     expect(getFilePreviewKind('audio.m4a')).toBe('audio');
     expect(getFilePreviewKind('movie.webm')).toBe('video');
   });
