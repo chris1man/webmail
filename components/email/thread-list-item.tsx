@@ -234,7 +234,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                 onToggle={() => toggleEmailSelection(email.id)}
                 selectLabel={tBatch('select')}
               />
-              {onMarkAsRead && <ReadStatusToggle isUnread={isUnread} onToggle={() => onMarkAsRead(!isUnread)} />}
+              {onMarkAsRead && <ReadStatusToggle isUnread={isUnread} onToggle={() => onMarkAsRead(isUnread)} />}
             </div>
           )}
 
@@ -656,7 +656,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                   onToggle={toggleThreadSelection}
                   selectLabel={tBatch('select')}
                 />
-                {onMarkAsRead && <ReadStatusToggle isUnread={hasUnread} onToggle={() => onMarkAsRead(latestEmail, !hasUnread)} />}
+                {onMarkAsRead && <ReadStatusToggle isUnread={hasUnread} onToggle={() => onMarkAsRead(latestEmail, hasUnread)} />}
                 {!isMobile && (
                   <button
                     data-expand-toggle

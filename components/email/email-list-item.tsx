@@ -188,7 +188,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
               onToggle={() => toggleEmailSelection(email.id)}
               selectLabel={tBatch('select')}
             />
-            {onMarkAsRead && <ReadStatusToggle isUnread={isUnread} onToggle={() => onMarkAsRead(!isUnread)} />}
+            {onMarkAsRead && <ReadStatusToggle isUnread={isUnread} onToggle={() => onMarkAsRead(isUnread)} />}
           </div>
         )}
 

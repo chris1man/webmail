@@ -1,4 +1,4 @@
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EmailListItem } from '../email-list-item';
 import { useSettingsStore, DEFAULT_KEYWORDS } from '@/stores/settings-store';
@@ -150,5 +150,30 @@ describe('EmailListItem shift-range checkbox', () => {
     expect(sel.has('e1')).toBe(true);
     expect(sel.has('e2')).toBe(true); // the in-between row got filled in
     expect(sel.has('e3')).toBe(true);
+  });
+});
+
+describe('EmailListItem read status toggle', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ emailKeywords: [...DEFAULT_KEYWORDS], showPreview: false, mailLayout: 'split' });
+    useEmailStore.setState({ selectedEmailIds: new Set<string>(), selectedMailbox: 'inbox' });
+  });
+
+  it('marks an unread email as read', () => {
+    const onMarkAsRead = vi.fn();
+    render(<EmailListItem email={makeEmail({ keywords: {} })} onMarkAsRead={onMarkAsRead} />);
+
+    fireEvent.click(document.querySelector('[aria-label="mark_read"]')!);
+
+    expect(onMarkAsRead).toHaveBeenCalledWith(true);
+  });
+
+  it('marks a read email as unread', () => {
+    const onMarkAsRead = vi.fn();
+    render(<EmailListItem email={makeEmail({ keywords: { $seen: true } })} onMarkAsRead={onMarkAsRead} />);
+
+    fireEvent.click(document.querySelector('[aria-label="mark_unread"]')!);
+
+    expect(onMarkAsRead).toHaveBeenCalledWith(false);
   });
 });

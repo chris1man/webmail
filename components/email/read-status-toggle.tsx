@@ -20,7 +20,7 @@ export function ReadStatusToggle({ isUnread, onToggle }: ReadStatusToggleProps) 
     <button
       type="button"
       className={cn(
-        "absolute start-1/2 top-full z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "absolute start-1/2 top-[calc(100%+6px)] z-20 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isUnread
           ? "opacity-100"
           : "opacity-0 transition-opacity group-hover/read-status:opacity-100 group-focus-within/read-status:opacity-100"
@@ -29,6 +29,7 @@ export function ReadStatusToggle({ isUnread, onToggle }: ReadStatusToggleProps) 
         event.stopPropagation();
         onToggle();
       }}
+      onPointerDown={(event) => event.stopPropagation()}
       aria-label={isUnread ? t("mark_read") : t("mark_unread")}
       title={isUnread ? t("mark_read") : t("mark_unread")}
     >
