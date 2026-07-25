@@ -111,7 +111,7 @@ export function ImageGallery({ images, initialIndex, loadImage, onClose }: Image
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4" role="dialog" aria-modal="true" aria-label="Image gallery" onClick={onClose}>
-      <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-4 text-white" onClick={(event) => event.stopPropagation()}>
+      <div className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between gap-4 text-white" onClick={(event) => event.stopPropagation()}>
         <div className="min-w-0">
           <p className="truncate font-medium">{image.name}</p>
           <p className="text-sm text-white/70">{formatFileSize(image.size)}</p>
