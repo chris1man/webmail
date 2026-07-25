@@ -665,7 +665,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                       onToggleExpand();
                     }}
                     className={cn(
-                      "absolute -bottom-2.5 start-full -translate-x-1/2 p-0.5 rounded-full",
+                      "absolute -bottom-2.5 start-[calc(100%+8px)] -translate-x-1/2 p-0.5 rounded-full",
                       "transition-all duration-200",
                       "hover:bg-muted/50 hover:scale-110",
                       "active:scale-95",
