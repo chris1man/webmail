@@ -734,6 +734,9 @@ export function EmailViewer({
     return (scid ? useAuthStore.getState().getClientForAccount(scid) : null) ?? client;
   }, [isUnifiedView, email?.sourceClientAccountId, client]);
   const blobAccountId = isUnifiedView ? email?.sourceAccountId : undefined;
+  const thumbnailAccountId = blobAccountId ?? blobClient?.getAccountId();
+  const thumbnailClientAccountId = isUnifiedView ? email?.sourceClientAccountId : activeAccountId;
+  const thumbnailSlot = useAccountStore((state) => state.accounts.find((account) => account.id === thumbnailClientAccountId)?.cookieSlot);
 
   // List-Unsubscribe mailto: send the message ourselves - this is a webmail
   // client, handing a mailto: URL to the OS mail handler goes nowhere for
@@ -2082,7 +2085,7 @@ export function EmailViewer({
   // The browser therefore never downloads an original image until the user
   // explicitly opens it in the gallery.
   useEffect(() => {
-    if (!blobAccountId) {
+    if (!thumbnailAccountId || thumbnailSlot === undefined) {
       setImageThumbUrls({});
       return;
     }
@@ -2091,10 +2094,10 @@ export function EmailViewer({
     );
     const urls = Object.fromEntries(imageAttachments.map((attachment) => [
       attachment.id,
-      `/api/image-thumbnail?blobId=${encodeURIComponent(attachment.blobId!)}&accountId=${encodeURIComponent(blobAccountId)}&name=${encodeURIComponent(attachment.name || 'image')}&type=${encodeURIComponent(attachment.type || 'image/*')}`,
+      `/api/image-thumbnail?slot=${thumbnailSlot}&blobId=${encodeURIComponent(attachment.blobId!)}&accountId=${encodeURIComponent(thumbnailAccountId)}&name=${encodeURIComponent(attachment.name || 'image')}&type=${encodeURIComponent(attachment.type || 'image/*')}`,
     ]));
     setImageThumbUrls(urls);
-  }, [email?.id, effectiveAttachments, blobAccountId]);
+  }, [email?.id, effectiveAttachments, thumbnailAccountId, thumbnailSlot]);
 
   // Iframe for rendering HTML emails true-to-life
   const iframeRef = useRef<HTMLIFrameElement>(null);

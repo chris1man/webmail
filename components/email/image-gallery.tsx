@@ -118,7 +118,14 @@ export function ImageGallery({ images, initialIndex, loadImage, onClose }: Image
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm tabular-nums">{index + 1} / {images.length}</span>
-          <button className="rounded-md p-2 hover:bg-white/15" onClick={onClose} aria-label="Close image gallery"><X className="h-5 w-5" /></button>
+          <button
+            className="rounded-md p-2 hover:bg-white/15"
+            onMouseDown={(event) => { event.preventDefault(); event.stopPropagation(); }}
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onClose(); }}
+            aria-label="Close image gallery"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
       </div>
 

@@ -220,6 +220,7 @@ export interface IJMAPClient {
   sendImipCancellation(event: CalendarEvent): Promise<void>;
 
   // ── Blobs ─────────────────────────────────────────────────────
+  getAccountId(): string;
   uploadBlob(
     file: File,
     optsOrAccountId?:
