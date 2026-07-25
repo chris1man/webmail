@@ -16,6 +16,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { EmailIdentityBadge } from "./email-identity-badge";
 import { EmailHoverActions } from "./email-hover-actions";
 import { getEmailColorTags } from "@/lib/thread-utils";
+import { ReadStatusToggle } from "./read-status-toggle";
 
 interface EmailListItemProps {
   email: Email;
@@ -176,7 +177,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
 
         {/* Avatar */}
         {density !== 'extra-compact' && (
-          <div className="group/unread-toggle relative flex shrink-0">
+          <div className="group/read-status relative flex shrink-0">
             <SelectableAvatar
               name={sender?.name}
               email={sender?.email}
@@ -187,30 +188,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
               onToggle={() => toggleEmailSelection(email.id)}
               selectLabel={tBatch('select')}
             />
-            {onMarkAsRead && (
-              <button
-                type="button"
-                className={cn(
-                  "absolute start-1/2 top-full z-10 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  isUnread
-                    ? "opacity-100"
-                    : "opacity-0 transition-opacity group-hover/unread-toggle:opacity-100 group-focus-within/unread-toggle:opacity-100"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkAsRead(!isUnread);
-                }}
-                aria-label={isUnread ? t('mark_read') : t('mark_unread')}
-                title={isUnread ? t('mark_read') : t('mark_unread')}
-              >
-                <span
-                  className={cn(
-                    "h-2.5 w-2.5 rounded-full",
-                    isUnread ? "bg-unread" : "border border-unread bg-background"
-                  )}
-                />
-              </button>
-            )}
+            {onMarkAsRead && <ReadStatusToggle isUnread={isUnread} onToggle={() => onMarkAsRead(!isUnread)} />}
           </div>
         )}
 

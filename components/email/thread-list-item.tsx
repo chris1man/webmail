@@ -5,7 +5,7 @@ import { formatDate, formatDateTime, stripInvisibleLeading } from "@/lib/utils";
 import { Email, ThreadGroup } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { SelectableAvatar } from "@/components/email/selectable-avatar";
-import { Paperclip, Star, Pin, Circle, ChevronRight, ChevronDown, Loader2, MessageSquare, CheckSquare, Square, Reply, Forward, CalendarClock, Folder } from "lucide-react";
+import { Paperclip, Star, Pin, ChevronRight, ChevronDown, Loader2, MessageSquare, CheckSquare, Square, Reply, Forward, CalendarClock, Folder } from "lucide-react";
 import { useSettingsStore, KEYWORD_PALETTE } from "@/stores/settings-store";
 import { useUIStore } from "@/stores/ui-store";
 import { useEmailStore } from "@/stores/email-store";
@@ -16,6 +16,7 @@ import { useLongPress } from "@/hooks/use-long-press";
 import { ThreadEmailItem } from "./thread-email-item";
 import { EmailHoverActions } from "./email-hover-actions";
 import { useTranslations } from "next-intl";
+import { ReadStatusToggle } from "./read-status-toggle";
 
 /**
  * Small chip showing the originating folder of a message, rendered in the
@@ -221,23 +222,20 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
             </button>
           )}
 
-          {isUnread && (
-            <div className="absolute start-0.5 top-1/2 -translate-y-1/2">
-              <Circle className="w-2 h-2 fill-unread text-unread" />
-            </div>
-          )}
-
           {density !== 'extra-compact' && (
-            <SelectableAvatar
-              name={sender?.name}
-              email={sender?.email}
-              size={isFocusedMailLayout ? "sm" : "md"}
-              className="flex-shrink-0 shadow-sm"
-              disableImages={hideJunkAvatarImages}
-              checked={isChecked}
-              onToggle={() => toggleEmailSelection(email.id)}
-              selectLabel={tBatch('select')}
-            />
+            <div className="group/read-status relative flex shrink-0">
+              <SelectableAvatar
+                name={sender?.name}
+                email={sender?.email}
+                size={isFocusedMailLayout ? "sm" : "md"}
+                className="shadow-sm"
+                disableImages={hideJunkAvatarImages}
+                checked={isChecked}
+                onToggle={() => toggleEmailSelection(email.id)}
+                selectLabel={tBatch('select')}
+              />
+              {onMarkAsRead && <ReadStatusToggle isUnread={isUnread} onToggle={() => onMarkAsRead(!isUnread)} />}
+            </div>
           )}
 
           <div className="flex-1 min-w-0">
@@ -646,14 +644,8 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
               </button>
             )}
 
-            {hasUnread && (
-              <div className="absolute start-0.5 top-1/2 -translate-y-1/2">
-                <Circle className="w-2 h-2 fill-unread text-unread" />
-              </div>
-            )}
-
             {density !== 'extra-compact' && (
-              <div className="relative flex-shrink-0">
+              <div className="group/read-status relative flex shrink-0">
                 <SelectableAvatar
                   name={avatarPerson?.name}
                   email={avatarPerson?.email}
@@ -664,6 +656,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                   onToggle={toggleThreadSelection}
                   selectLabel={tBatch('select')}
                 />
+                {onMarkAsRead && <ReadStatusToggle isUnread={hasUnread} onToggle={() => onMarkAsRead(latestEmail, !hasUnread)} />}
                 {!isMobile && (
                   <button
                     data-expand-toggle
@@ -672,7 +665,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                       onToggleExpand();
                     }}
                     className={cn(
-                      "absolute -bottom-2.5 left-1/2 -translate-x-1/2 p-0.5 rounded-full",
+                      "absolute -bottom-2.5 start-full -translate-x-1/2 p-0.5 rounded-full",
                       "transition-all duration-200",
                       "hover:bg-muted/50 hover:scale-110",
                       "active:scale-95",
