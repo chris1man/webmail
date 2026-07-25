@@ -2078,12 +2078,23 @@ export function EmailViewer({
     </button>
   ) : null;
 
-  // Do not download full image attachments merely to decorate attachment chips.
-  // JMAP does not expose image thumbnails separately, so fetching them here
-  // would transfer every original before the user asks to view one.
+  // Attachment-card previews are generated server-side as small WebP files.
+  // The browser therefore never downloads an original image until the user
+  // explicitly opens it in the gallery.
   useEffect(() => {
-    setImageThumbUrls({});
-  }, [email?.id]);
+    if (!blobAccountId) {
+      setImageThumbUrls({});
+      return;
+    }
+    const imageAttachments = effectiveAttachments.filter(
+      (attachment) => attachment.blobId && attachment.type?.toLowerCase().startsWith('image/'),
+    );
+    const urls = Object.fromEntries(imageAttachments.map((attachment) => [
+      attachment.id,
+      `/api/image-thumbnail?blobId=${encodeURIComponent(attachment.blobId!)}&accountId=${encodeURIComponent(blobAccountId)}&name=${encodeURIComponent(attachment.name || 'image')}&type=${encodeURIComponent(attachment.type || 'image/*')}`,
+    ]));
+    setImageThumbUrls(urls);
+  }, [email?.id, effectiveAttachments, blobAccountId]);
 
   // Iframe for rendering HTML emails true-to-life
   const iframeRef = useRef<HTMLIFrameElement>(null);
