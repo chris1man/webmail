@@ -93,7 +93,10 @@ export async function proxy(request: NextRequest) {
     ? `'self' 'nonce-${nonce}' 'unsafe-eval'`
     : `'self' 'nonce-${nonce}'`;
 
-  const connectSrc = isDev ? `'self' http: https: ws: wss:` : `'self' https:`;
+  // PDF.js reads attachment previews through blob: URLs. Allowing blob: here
+  // permits only browser-created in-memory data and keeps network access
+  // restricted to the existing self/HTTPS policy.
+  const connectSrc = isDev ? `'self' blob: http: https: ws: wss:` : `'self' blob: https:`;
 
   const frameAncestors = isSandboxPath
     ? `'self'`
