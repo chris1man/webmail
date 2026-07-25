@@ -675,7 +675,6 @@ export function EmailViewer({
   const calendarInvitationParsingEnabled = useSettingsStore((state) => state.calendarInvitationParsingEnabled);
   const readReceiptResponse = useSettingsStore((state) => state.readReceiptResponse);
   const hideInlineImageAttachments = useSettingsStore((state) => state.hideInlineImageAttachments);
-  const attachmentImagePreviewsEnabled = useSettingsStore((state) => state.attachmentImagePreviewsEnabled);
   const dragOutActive = useMemo(() => isDragOutSupported(), []);
   const emailDownloadTemplate = useSettingsStore((state) => state.emailDownloadTemplate) || DEFAULT_EMAIL_TEMPLATE;
   const attachmentDownloadTemplate = useSettingsStore((state) => state.attachmentDownloadTemplate) || DEFAULT_ATTACHMENT_TEMPLATE;
@@ -794,6 +793,8 @@ export function EmailViewer({
   const [imageThumbUrls, setImageThumbUrls] = useState<Record<string, string>>({});
   const [imageGallery, setImageGallery] = useState<{ images: GalleryImage[]; initialIndex: number } | null>(null);
   const galleryRequestRef = useRef(0);
+  const galleryUrlsRef = useRef(new Map<string, string>());
+  const galleryLoadsRef = useRef(new Map<string, Promise<string | null>>());
   const [allowExternalContent, setAllowExternalContent] = useState(false);
   const [hasBlockedContent, setHasBlockedContent] = useState(false);
   const [cidBlobUrls, setCidBlobUrls] = useState<Record<string, string>>({});
@@ -1800,50 +1801,71 @@ export function EmailViewer({
     [email, attachmentFilenameOptions],
   );
 
+  const clearGalleryUrls = useCallback(() => {
+    galleryUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    galleryUrlsRef.current.clear();
+    galleryLoadsRef.current.clear();
+  }, []);
+
   const closeImageGallery = useCallback(() => {
     galleryRequestRef.current += 1;
-    setImageGallery((current) => {
-      current?.images.forEach((image) => URL.revokeObjectURL(image.url));
-      return null;
-    });
-  }, []);
+    clearGalleryUrls();
+    setImageGallery(null);
+  }, [clearGalleryUrls]);
 
   // A blob fetch can finish after the reader moved to another message or
   // dismissed the gallery. Invalidate that pending request so it cannot reopen
   // the overlay on the next interaction.
   useEffect(() => closeImageGallery(), [email?.id, closeImageGallery]);
 
-  const openImageGallery = useCallback(async (attachment: EffectiveAttachment) => {
-    const requestId = ++galleryRequestRef.current;
+  const loadGalleryImage = useCallback(async (item: GalleryImage): Promise<string | null> => {
+    const cached = galleryUrlsRef.current.get(item.id);
+    if (cached) return cached;
+    const pending = galleryLoadsRef.current.get(item.id);
+    if (pending) return pending;
+
+    const requestId = galleryRequestRef.current;
+    const attachment = effectiveAttachments.find((candidate) => candidate.id === item.id);
+    if (!attachment) return null;
+
+    const request = (async () => {
+      try {
+        let url: string | null = null;
+        if (attachment.blobId && blobClient) {
+          url = await blobClient.fetchBlobAsObjectUrl(attachment.blobId, attachment.name || 'image', attachment.type, blobAccountId);
+        } else {
+          const bytes = attachment.tnefData ?? (attachment.decryptedAttachment ? getAttachmentContentBytes(attachment.decryptedAttachment) : null);
+          if (!bytes) return null;
+          const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+          url = URL.createObjectURL(new Blob([buffer], { type: attachment.type }));
+        }
+        if (requestId !== galleryRequestRef.current) {
+          URL.revokeObjectURL(url);
+          return null;
+        }
+        galleryUrlsRef.current.set(item.id, url);
+        return url;
+      } catch {
+        return null;
+      } finally {
+        galleryLoadsRef.current.delete(item.id);
+      }
+    })();
+    galleryLoadsRef.current.set(item.id, request);
+    return request;
+  }, [blobAccountId, blobClient, effectiveAttachments]);
+
+  const openImageGallery = useCallback((attachment: EffectiveAttachment) => {
+    galleryRequestRef.current += 1;
+    clearGalleryUrls();
     const images = effectiveAttachments.filter((item) => item.type.toLowerCase().startsWith('image/'));
     const initialIndex = images.findIndex((item) => item.id === attachment.id);
     if (initialIndex < 0) return;
-
-    const galleryImages = await Promise.all(images.map(async (item): Promise<GalleryImage | null> => {
-      try {
-        if (item.blobId && blobClient) {
-          const url = await blobClient.fetchBlobAsObjectUrl(item.blobId, item.name || 'image', item.type, blobAccountId);
-          return { id: item.id, name: item.name || 'Image', size: item.size, url };
-        }
-        const bytes = item.tnefData ?? (item.decryptedAttachment ? getAttachmentContentBytes(item.decryptedAttachment) : null);
-        if (!bytes) return null;
-        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-        return { id: item.id, name: item.name || 'Image', size: item.size, url: URL.createObjectURL(new Blob([buffer], { type: item.type })) };
-      } catch {
-        return null;
-      }
-    }));
-    const resolvedImages = galleryImages.filter((item): item is GalleryImage => item !== null);
-    const resolvedInitialIndex = resolvedImages.findIndex((item) => item.id === attachment.id);
-    if (requestId !== galleryRequestRef.current || resolvedInitialIndex < 0) {
-      resolvedImages.forEach((item) => URL.revokeObjectURL(item.url));
-      return;
-    }
-    setImageGallery((current) => {
-      current?.images.forEach((image) => URL.revokeObjectURL(image.url));
-      return { images: resolvedImages, initialIndex: resolvedInitialIndex };
+    setImageGallery({
+      images: images.map((item) => ({ id: item.id, name: item.name || 'Image', size: item.size, url: '' })),
+      initialIndex,
     });
-  }, [blobAccountId, blobClient, effectiveAttachments]);
+  }, [clearGalleryUrls, effectiveAttachments]);
 
   const handleEffectiveAttachmentOpen = useCallback(async (attachment: EffectiveAttachment) => {
     if (attachment.type.toLowerCase().startsWith('image/')) {
@@ -2056,64 +2078,12 @@ export function EmailViewer({
     </button>
   ) : null;
 
-  // Pre-fetch object URLs for image attachments so their actual contents can be
-  // rendered as thumbnails inside the chip. Skips images larger than 10 MB.
+  // Do not download full image attachments merely to decorate attachment chips.
+  // JMAP does not expose image thumbnails separately, so fetching them here
+  // would transfer every original before the user asks to view one.
   useEffect(() => {
-    let cancelled = false;
-    const createdUrls: string[] = [];
-
-    if (!attachmentImagePreviewsEnabled) {
-      setImageThumbUrls({});
-      return;
-    }
-
-    const imageAttachments = effectiveAttachments.filter(
-      (att) => (att.type || '').startsWith('image/') && att.size <= 10_000_000,
-    );
-
-    if (imageAttachments.length === 0) {
-      setImageThumbUrls({});
-      return;
-    }
-
-    (async () => {
-      const next: Record<string, string> = {};
-      await Promise.all(imageAttachments.map(async (att) => {
-        let url: string | undefined;
-        try {
-          if (att.blobId && blobClient) {
-            url = await blobClient.fetchBlobAsObjectUrl(att.blobId, att.name || 'thumb', att.type, blobAccountId);
-          } else if (att.decryptedAttachment) {
-            const bytes = getAttachmentContentBytes(att.decryptedAttachment);
-            if (!bytes || bytes.byteLength === 0) return;
-            const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-            url = URL.createObjectURL(new Blob([buffer], { type: att.type || 'application/octet-stream' }));
-          } else if (att.tnefData) {
-            const buffer = att.tnefData.buffer.slice(
-              att.tnefData.byteOffset,
-              att.tnefData.byteOffset + att.tnefData.byteLength,
-            ) as ArrayBuffer;
-            url = URL.createObjectURL(new Blob([buffer], { type: att.type || 'application/octet-stream' }));
-          }
-        } catch {
-          return;
-        }
-        if (!url) return;
-        if (cancelled) {
-          URL.revokeObjectURL(url);
-          return;
-        }
-        createdUrls.push(url);
-        next[att.id] = url;
-      }));
-      if (!cancelled) setImageThumbUrls(next);
-    })();
-
-    return () => {
-      cancelled = true;
-      createdUrls.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, [effectiveAttachments, client, blobClient, blobAccountId, attachmentImagePreviewsEnabled]);
+    setImageThumbUrls({});
+  }, [email?.id]);
 
   // Iframe for rendering HTML emails true-to-life
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -4898,9 +4868,13 @@ export function EmailViewer({
           style={isDark ? { backgroundColor: '#121212' } : undefined}>
             {isBodyLoading ? (
               <div
-                className="space-y-3 px-6 py-4 animate-pulse"
+                className="relative space-y-3 px-6 py-4 animate-pulse"
                 style={{ minHeight: `${lastBodyHeightRef.current}px` }}
               >
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm text-muted-foreground backdrop-blur-[1px]">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>{t('loading_email')}</span>
+                </div>
                 <div className="h-2 bg-muted/15 rounded w-full"></div>
                 <div className="h-2 bg-muted/15 rounded w-5/6"></div>
                 <div className="h-2 bg-muted/15 rounded w-4/6"></div>
@@ -5234,6 +5208,7 @@ export function EmailViewer({
       <ImageGallery
         images={imageGallery.images}
         initialIndex={imageGallery.initialIndex}
+        loadImage={loadGalleryImage}
         onClose={closeImageGallery}
       />
     )}
