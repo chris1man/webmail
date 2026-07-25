@@ -2,6 +2,7 @@ services:
   webmail:
     # Built by GitHub Actions; Portainer only pulls the finished image.
     image: ghcr.io/chris1man/webmail:smart-title-gallery
+    pull_policy: always
     ports:
       - "3001:3000"
     environment:
