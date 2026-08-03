@@ -1662,6 +1662,10 @@ export function EmailComposer({
   // second click in the same tick - and isSending drives button disabling.
   const [isSending, setIsSending] = useState(false);
   const isSendingRef = useRef(false);
+  // Saving a draft is deliberately separate from EmailSubmission. Keep a
+  // persistent, visible result for the latter so a rejected submission cannot
+  // be mistaken for a successfully sent message that merely remained drafted.
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Attachments still uploading when Send is clicked used to be silently
   // dropped from the outgoing message (the filters below exclude anything
@@ -1741,6 +1745,7 @@ export function EmailComposer({
 
     // Past every "don't send" early return - mark the send in flight so a
     // second click is a no-op until this resolves (reset in the finally below).
+    setSendError(null);
     isSendingRef.current = true;
     setIsSending(true);
 
@@ -1979,7 +1984,9 @@ export function EmailComposer({
       stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
     } catch (err) {
       debug.error('Failed to send email:', err);
-      toast.error(err instanceof Error ? err.message : t('send_failed'));
+      const message = err instanceof Error && err.message ? err.message : t('send_failed');
+      setSendError(message);
+      toast.error(message);
     } finally {
       isSendingRef.current = false;
       setIsSending(false);
@@ -2152,7 +2159,19 @@ export function EmailComposer({
           </Button>
           <div className="flex items-center gap-2" data-testid="composer-save-status" data-status={saveStatus}>
             <h3 className="font-semibold text-base">{t('new_message')}</h3>
-            {saveStatus === 'saving' && (
+            {isSending && (
+              <div className="flex items-center gap-1 text-xs text-primary" aria-live="polite">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span className="hidden md:inline">{t('sending')}</span>
+              </div>
+            )}
+            {!isSending && sendError && (
+              <div className="flex items-center gap-1 text-xs text-red-600" role="status">
+                <AlertCircle className="w-3 h-3" />
+                <span className="hidden md:inline">{t('send_failed')}</span>
+              </div>
+            )}
+            {!isSending && !sendError && saveStatus === 'saving' && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Save className="w-3 h-3 animate-pulse" />
                 <span className="hidden md:inline">{t('saving')}</span>
@@ -2185,6 +2204,23 @@ export function EmailComposer({
           {t('send')}
         </Button>
       </div>
+
+      {sendError && (
+        <div className="flex items-center gap-3 border-b border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-700 dark:text-red-300" role="alert">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{t('send_failed')}</p>
+            <p className="truncate text-xs opacity-90" title={sendError}>{sendError}</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => void handleSend()} disabled={isSending} className="border-red-500/40 bg-background hover:bg-red-500/10">
+            <Send className="mr-1.5 h-3.5 w-3.5" />
+            {tCommon('retry')}
+          </Button>
+          <Button size="icon" variant="ghost" onClick={() => setSendError(null)} className="h-7 w-7 text-red-700 hover:bg-red-500/10 hover:text-red-700 dark:text-red-300 dark:hover:text-red-300" aria-label={tCommon('close')}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-auto">
         {/* Fields section */}
