@@ -34,3 +34,12 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/webmail:smart-title-gallery
             ghcr.io/${{ github.repository_owner }}/webmail:sha-${{ github.sha }}
+
+      - name: Build and publish mail alerts
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/mail-alerts
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/mail-alerts:smart-title-gallery
+            ghcr.io/${{ github.repository_owner }}/mail-alerts:sha-${{ github.sha }}

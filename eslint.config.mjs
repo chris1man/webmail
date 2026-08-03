@@ -54,6 +54,12 @@ export default [
     },
   },
   {
+    files: ["services/**/*.mjs"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
     languageOptions: {
       globals: {
