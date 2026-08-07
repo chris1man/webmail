@@ -110,12 +110,13 @@ export function createTelegramClient({ token, chatId, state, apiBase }) {
       const poll = async () => {
         try {
           const updates = await call('getUpdates', { offset: (state.state.telegramUpdateOffset || 0) + 1, timeout: 25, allowed_updates: ['callback_query'] });
+          await state.clearPollingError();
           for (const update of updates) {
             await state.updateTelegramOffset(update.update_id);
             if (update.callback_query) await processCallback(update.callback_query, { onAllow, onBlock });
           }
         } catch (error) {
-          await state.setError(error);
+          await state.setPollingError(error);
         } finally {
           setTimeout(poll, 1000);
         }

@@ -62,7 +62,7 @@ function eventForStorage(event) {
 export function createStateStore(path) {
   const state = {
     startedAt: new Date().toISOString(), received: 0, telegramSent: 0, telegramFailed: 0,
-    lastError: null, events: [], actions: [], knownIps: {}, handledIds: [], pendingActions: {}, telegramUpdateOffset: 0,
+    lastError: null, lastPollingError: null, events: [], actions: [], knownIps: {}, handledIds: [], pendingActions: {}, telegramUpdateOffset: 0,
   };
 
   async function save() {
@@ -85,6 +85,9 @@ export function createStateStore(path) {
       try {
         const restored = JSON.parse(await readFile(path, 'utf8'));
         Object.assign(state, restored);
+        // Older versions used lastError for transient Telegram polling failures.
+        // Do not keep the generic stale message in the dashboard after upgrading.
+        if (!Object.hasOwn(restored, 'lastPollingError') && state.lastError === 'fetch failed') state.lastError = null;
         state.events = Array.isArray(state.events) ? state.events.slice(0, maxEvents) : [];
         state.actions = Array.isArray(state.actions) ? state.actions.slice(0, maxActions) : [];
         state.handledIds = Array.isArray(state.handledIds) ? state.handledIds.slice(0, maxHandledIds) : [];
@@ -97,6 +100,15 @@ export function createStateStore(path) {
     save,
     async setError(error) {
       state.lastError = error instanceof Error ? error.message : String(error || 'Unknown error');
+      await save().catch(() => {});
+    },
+    async setPollingError(error) {
+      state.lastPollingError = error instanceof Error ? error.message : String(error || 'Unknown error');
+      await save().catch(() => {});
+    },
+    async clearPollingError() {
+      if (state.lastPollingError === null) return;
+      state.lastPollingError = null;
       await save().catch(() => {});
     },
     async recordAction(action) {
@@ -185,7 +197,7 @@ export function createStateStore(path) {
     publicStatus() {
       return {
         startedAt: state.startedAt, received: state.received, telegramSent: state.telegramSent,
-        telegramFailed: state.telegramFailed, lastError: state.lastError, events: state.events,
+        telegramFailed: state.telegramFailed, lastError: state.lastError, lastPollingError: state.lastPollingError, events: state.events,
         actions: state.actions, knownIpCount: Object.values(state.knownIps).reduce((count, ips) => count + Object.keys(ips).length, 0),
       };
     },
