@@ -38,3 +38,12 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/mail-alerts:mail-alerts-telegram
             ghcr.io/${{ github.repository_owner }}/mail-alerts:sha-${{ github.sha }}
+
+      - name: Trigger Portainer redeploy
+        if: github.ref == 'refs/heads/codex/mail-alerts-telegram'
+        env:
+          PORTAINER_WEBHOOK_MAIL_ALERTS: ${{ secrets.PORTAINER_WEBHOOK_MAIL_ALERTS }}
+        run: |
+          test -n "$PORTAINER_WEBHOOK_MAIL_ALERTS"
+          curl --fail --silent --show-error --retry 3 --retry-all-errors \
+            --request POST "$PORTAINER_WEBHOOK_MAIL_ALERTS"
