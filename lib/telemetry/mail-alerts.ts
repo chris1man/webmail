@@ -21,7 +21,14 @@ export async function notifyMailAlertsLogin(input: {
 }): Promise<void> {
   const baseUrl = process.env.MAIL_ALERTS_URL;
   const secret = process.env.MAIL_ALERTS_SECRET;
-  if (!baseUrl || !secret || !input.ip) return;
+  if (!baseUrl || !secret) {
+    logger.warn('Mail alerts login notification skipped: service is not configured');
+    return;
+  }
+  if (!input.ip) {
+    logger.warn('Mail alerts login notification skipped: proxy did not provide a valid client IP');
+    return;
+  }
 
   let endpoint: URL;
   try {
@@ -52,7 +59,11 @@ export async function notifyMailAlertsLogin(input: {
       }),
       signal: AbortSignal.timeout(ALERT_TIMEOUT_MS),
     });
-    if (!response.ok) logger.warn('Mail alerts login notification rejected', { status: response.status });
+    if (!response.ok) {
+      logger.warn('Mail alerts login notification rejected', { status: response.status });
+      return;
+    }
+    logger.info('Mail alerts login notification delivered', { account: input.account, ip: input.ip });
   } catch (error) {
     logger.warn('Mail alerts login notification failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
