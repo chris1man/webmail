@@ -304,6 +304,31 @@ function isHtmlBodyEffectivelyEmpty(html: string): boolean {
   return textContent.length === 0;
 }
 
+function EmailLoadingState({ label, className }: { label: string; className?: string }) {
+  return (
+    <div className={cn("flex-1 flex h-full items-center justify-center bg-background", className)}>
+      <div className="flex w-full max-w-xs flex-col items-center gap-5 px-6 text-center">
+        <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-primary/10">
+          <div className="absolute inset-0 rounded-full border-4 border-primary/15 border-t-primary border-r-primary animate-spin" />
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+        <div className="space-y-3">
+          <p className="text-base font-medium text-foreground">{label}</p>
+          <div className="h-1.5 w-56 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <div className="h-full rounded-full bg-primary" style={{ animation: 'email-loading-progress 1.8s ease-in-out infinite' }} />
+          </div>
+        </div>
+      </div>
+      <style jsx>{`
+        @keyframes email-loading-progress {
+          0%, 100% { width: 14%; margin-left: 0; }
+          50% { width: 82%; margin-left: 18%; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 interface EffectiveAttachment {
   id: string;
   name: string | null;
@@ -2250,10 +2275,6 @@ export function EmailViewer({
   // CSP is fixed at load — the strict blocking-mode CSP would keep refusing the
   // restored URLs.
 
-  // Tracks the last rendered body height so the loading skeleton can hold
-  // the same size - avoids the body shrink/expand flash when switching emails.
-  const lastBodyHeightRef = useRef<number>(300);
-
   // True while the new email's body is still being fetched. Catches the
   // window between selectedEmail changing and isLoading flipping true, so the
   // quick reply / body don't flicker through a partial render.
@@ -2308,7 +2329,6 @@ export function EmailViewer({
           if (iframe.contentDocument !== doc) return; // navigated away; stale
           const height = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight);
           iframe.style.height = height + 'px';
-          lastBodyHeightRef.current = height;
         };
         const resizeObserver = new ResizeObserver(applyHeight);
         resizeObserver.observe(doc.body);
@@ -2721,54 +2741,10 @@ export function EmailViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readReceiptResponse, shouldOfferReadReceipt, email?.id, sendReadReceiptNow]);
 
-  // Show loading skeleton while email is being fetched
+  // The initial selection may not have an Email object yet. Show the same
+  // clear full-view loader used while a selected message body is fetched.
   if (isLoading && !email) {
-    return (
-      <div className={cn("flex-1 flex flex-col h-full bg-background overflow-hidden animate-in fade-in duration-200", className)}>
-        {/* Loading Header Skeleton - gentler animation */}
-        <div className="bg-background border-b border-border">
-          <div className="px-4 lg:px-6 py-3 lg:py-4">
-            <div className="flex items-start justify-between gap-2 lg:gap-4">
-              <div className="flex-1 min-w-0 space-y-2 lg:space-y-3">
-                <div className="h-6 lg:h-8 bg-muted/60 rounded-md w-3/4"></div>
-                <div className="flex items-center gap-2 lg:gap-3">
-                  <div className="h-3 lg:h-4 bg-muted/60 rounded w-24 lg:w-32"></div>
-                  <div className="h-3 lg:h-4 bg-muted/60 rounded w-16 lg:w-24"></div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 lg:gap-2">
-                <div className="h-8 w-8 lg:w-20 bg-muted/60 rounded"></div>
-                <div className="h-8 w-8 bg-muted/60 rounded hidden lg:block"></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Loading Sender Info Skeleton */}
-          <div className="px-4 lg:px-6 pb-3 lg:pb-4">
-            <div className="flex items-start gap-3 lg:gap-4">
-              <div className="w-10 h-10 lg:w-12 lg:h-12 bg-muted/60 rounded-full"></div>
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-muted/60 rounded w-48"></div>
-                <div className="h-3 bg-muted/60 rounded w-64"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Loading Content Skeleton */}
-        <div className="flex-1 overflow-auto bg-muted/20">
-          <div className="px-6 pt-4 pb-6">
-            <div className="space-y-3">
-              <div className="h-4 bg-muted/60 rounded w-full"></div>
-              <div className="h-4 bg-muted/60 rounded w-5/6"></div>
-              <div className="h-4 bg-muted/60 rounded w-4/6"></div>
-              <div className="h-4 bg-muted/60 rounded w-full"></div>
-              <div className="h-4 bg-muted/60 rounded w-3/4"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <EmailLoadingState label={t('loading_email')} className={className} />;
   }
 
   if (!email) {
@@ -3411,6 +3387,12 @@ export function EmailViewer({
       )}
     </>
   );
+
+  // Once a message is selected, its headers may be available before its body.
+  // Keep the loading state equally explicit instead of showing a partial email.
+  if (isBodyLoading) {
+    return <EmailLoadingState label={t('loading_email')} className={className} />;
+  }
 
   return (
     <div
@@ -4825,22 +4807,7 @@ export function EmailViewer({
             !isDark && resolvedTheme === 'dark' ? "bg-white email-content-light" : "bg-background"
           )}
           style={isDark ? { backgroundColor: '#121212' } : undefined}>
-            {isBodyLoading ? (
-              <div
-                className="relative space-y-3 px-6 py-4 animate-pulse"
-                style={{ minHeight: `${lastBodyHeightRef.current}px` }}
-              >
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-background/70 text-sm text-muted-foreground backdrop-blur-[1px]">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>{t('loading_email')}</span>
-                </div>
-                <div className="h-2 bg-muted/15 rounded w-full"></div>
-                <div className="h-2 bg-muted/15 rounded w-5/6"></div>
-                <div className="h-2 bg-muted/15 rounded w-4/6"></div>
-                <div className="h-2 bg-muted/15 rounded w-full"></div>
-                <div className="h-2 bg-muted/15 rounded w-3/4"></div>
-              </div>
-            ) : effectiveEmailContent.isHtml ? (
+            {effectiveEmailContent.isHtml ? (
               <iframe
                 ref={iframeRef}
                 srcDoc={emailIframeSrcDoc}
