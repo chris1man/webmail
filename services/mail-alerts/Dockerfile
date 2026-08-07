@@ -3,6 +3,7 @@ FROM node:22-alpine
 WORKDIR /app
 RUN addgroup -S alerts && adduser -S alerts -G alerts && mkdir /data && chown alerts:alerts /data
 COPY server.mjs ./server.mjs
+COPY lib ./lib
 
 USER alerts
 ENV NODE_ENV=production PORT=8080 STATE_PATH=/data/state.json
