@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     });
 
     void recordLogin(username, normalizedServerUrl);
-    void notifyMailAlertsLogin({
+    await notifyMailAlertsLogin({
       account: username,
       ip: requestClientIp(request),
       userAgent: request.headers.get('user-agent'),
