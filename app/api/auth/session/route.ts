@@ -6,8 +6,6 @@ import { SESSION_COOKIE_MAX_AGE, sessionCookieName } from '@/lib/auth/session-co
 import { getCookieOptions } from '@/lib/oauth/cookie-config';
 import {
   JmapAuthVerificationError,
-  normalizeJmapServerUrl,
-  validateProxyAuthHeader,
   verifyJmapAuth,
 } from '@/lib/auth/verify-jmap-auth';
 import {
@@ -17,6 +15,7 @@ import {
 import { configManager } from '@/lib/admin/config-manager';
 import { isPublicHttpUrl } from '@/lib/security/url-guard';
 import { recordLogin } from '@/lib/telemetry/login-tracker';
+import { notifyMailAlertsLogin, requestClientIp } from '@/lib/telemetry/mail-alerts';
 import { parseJmapServers, resolveTrustedJmapUrl } from '@/lib/admin/jmap-servers';
 import { MAX_ACCOUNT_SLOTS } from '@/lib/account-utils';
 
@@ -81,13 +80,10 @@ export async function POST(request: NextRequest) {
     const slot = typeof bodySlot === 'number' && bodySlot >= 0 && bodySlot < MAX_ACCOUNT_SLOTS ? bodySlot : getSlot(request);
     const cookieName = sessionCookieName(slot);
     const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-    // Trusted (admin-configured) URLs skip the upstream re-fetch: the cookie
-    // we write here is only ever consumed for requests on behalf of this same
-    // user, so bogus credentials would just yield 401s downstream rather than
-    // privilege escalation. Untrusted custom endpoints still verify upstream.
-    const normalizedServerUrl = upstreamTrusted
-      ? (validateProxyAuthHeader(authHeader), normalizeJmapServerUrl(upstreamUrl))
-      : await verifyJmapAuth(upstreamUrl, authHeader, { trusted: false });
+    // Verify credentials before creating the browser session. Besides avoiding
+    // a deferred login failure, this is the authoritative success point for
+    // server-side login alerts.
+    const normalizedServerUrl = await verifyJmapAuth(upstreamUrl, authHeader, { trusted: upstreamTrusted });
     const token = encryptSession(normalizedServerUrl, username, password);
     const cookieStore = await cookies();
     cookieStore.set(cookieName, token, sessionCookieOptions());
@@ -98,6 +94,11 @@ export async function POST(request: NextRequest) {
     });
 
     void recordLogin(username, normalizedServerUrl);
+    void notifyMailAlertsLogin({
+      account: username,
+      ip: requestClientIp(request),
+      userAgent: request.headers.get('user-agent'),
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {
