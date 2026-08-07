@@ -9,15 +9,20 @@ services:
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
       ALERTS_UI_USERNAME: ${ALERTS_UI_USERNAME}
       ALERTS_UI_PASSWORD: ${ALERTS_UI_PASSWORD}
+      STALWART_JMAP_URL: ${STALWART_JMAP_URL:-http://stalwart:8080/jmap}
+      STALWART_API_TOKEN: ${STALWART_API_TOKEN:-}
       TZ: Asia/Tomsk
     volumes:
       - mail_alerts_data:/data
     networks:
       - proxy-network
+      - mail-network
 
 volumes:
   mail_alerts_data:
 
 networks:
   proxy-network:
+    external: true
+  mail-network:
     external: true
