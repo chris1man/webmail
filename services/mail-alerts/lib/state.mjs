@@ -19,8 +19,9 @@ function compactData(data) {
 
 function extractLogin(data) {
   if (!data || typeof data !== 'object') return null;
-  const account = ['accountName', 'account', 'email', 'username', 'login', 'principal']
-    .map((key) => data[key]).find((value) => typeof value === 'string' && value.length > 0);
+  const accountValue = ['accountName', 'account', 'email', 'username', 'login', 'principal', 'accountId']
+    .map((key) => data[key]).find((value) => (typeof value === 'string' && value.length > 0) || Number.isInteger(value));
+  const account = accountValue === undefined ? undefined : String(accountValue);
   const ip = ['remoteIp', 'remoteIP', 'ip', 'remote_ip']
     .map((key) => data[key]).find((value) => typeof value === 'string' && value.length > 0);
   return account && ip ? { account, ip } : null;

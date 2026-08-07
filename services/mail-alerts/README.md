@@ -41,6 +41,6 @@ Create a WebHook in **Settings → Telemetry → Webhooks**:
 - Event policy: Include
 - Events: `auth.success`, terminal queue/delivery failures, `message-ingest.error`, `store.rocksdb-error`, `store.s3-error`, `store.unexpected-error`, `task-queue.task-failed`, `telemetry.webhook-error`.
 
-`auth.success` does not create an alert for every login. The service keeps a local per-account list of known IPs and notifies only for a previously unseen account/IP pair. A mobile user changing networks can therefore legitimately trigger an alert.
+`auth.success` does not create an alert for every login. The service keeps a local per-account list of known IPs and notifies only for a previously unseen account/IP pair. Stalwart supplies the account ID in this event, so a notification may show a numeric user ID rather than an email address. A mobile user changing networks can legitimately trigger an alert.
 
 Telegram uses long polling for callback buttons; no inbound Telegram URL or public bot webhook is needed. The `BlockedIp` action prevents future connections from that IP. It does not change the user password or account and cannot permanently identify a physical device that changes IP addresses.
