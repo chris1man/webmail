@@ -43,3 +43,11 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/mail-alerts:smart-title-gallery
             ghcr.io/${{ github.repository_owner }}/mail-alerts:sha-${{ github.sha }}
+
+      - name: Trigger Portainer redeploy
+        env:
+          PORTAINER_WEBHOOK_BULWARK_TEST: ${{ secrets.PORTAINER_WEBHOOK_BULWARK_TEST }}
+        run: |
+          test -n "$PORTAINER_WEBHOOK_BULWARK_TEST"
+          curl --fail --silent --show-error --retry 3 --retry-all-errors \
+            --request POST "$PORTAINER_WEBHOOK_BULWARK_TEST"
