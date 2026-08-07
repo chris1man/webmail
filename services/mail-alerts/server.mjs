@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { timingSafeEqual } from 'node:crypto';
+import { readJsonBody, secureEqual, verifyHmac } from './lib/http.mjs';
+import { createStateStore } from './lib/state.mjs';
+import { createTelegramClient } from './lib/telegram.mjs';
+import { blockIp } from './lib/stalwart.mjs';
+import { renderPage } from './lib/ui.mjs';
 
 const port = Number(process.env.PORT || 8080);
 const telegramToken = required('TELEGRAM_BOT_TOKEN');
@@ -8,9 +11,15 @@ const telegramChatId = required('TELEGRAM_CHAT_ID');
 const webhookSecret = required('WEBHOOK_SECRET');
 const uiUsername = required('ALERTS_UI_USERNAME');
 const uiPassword = required('ALERTS_UI_PASSWORD');
-const statePath = process.env.STATE_PATH || '/data/state.json';
+const telegramPolling = process.env.TELEGRAM_POLLING !== 'false';
+const state = createStateStore(process.env.STATE_PATH || '/data/state.json');
+const telegram = createTelegramClient({
+  token: telegramToken,
+  chatId: telegramChatId,
+  state,
+  apiBase: process.env.TELEGRAM_API_BASE || 'https://api.telegram.org',
+});
 const maxBodyBytes = 128 * 1024;
-const maxEvents = 50;
 
 function required(name) {
   const value = process.env[name];
@@ -18,35 +27,12 @@ function required(name) {
   return value;
 }
 
-const state = {
-  startedAt: new Date().toISOString(),
-  received: 0,
-  telegramSent: 0,
-  telegramFailed: 0,
-  lastError: null,
-  events: [],
-};
-
-async function loadState() {
-  try {
-    Object.assign(state, JSON.parse(await readFile(statePath, 'utf8')));
-    state.events = Array.isArray(state.events) ? state.events.slice(0, maxEvents) : [];
-  } catch (error) {
-    if (error?.code !== 'ENOENT') console.error('Unable to restore alert state:', error);
-  }
-}
-
-async function saveState() {
-  await mkdir(new URL('.', `file://${statePath}`).pathname, { recursive: true });
-  const temporary = `${statePath}.tmp`;
-  await writeFile(temporary, JSON.stringify(state), { mode: 0o600 });
-  await rename(temporary, statePath);
-}
-
-function secureEqual(actual, expected) {
-  const actualBuffer = Buffer.from(actual || '');
-  const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+function json(response, status, body) {
+  response.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  response.end(JSON.stringify(body));
 }
 
 function hasUiAccess(request) {
@@ -56,9 +42,8 @@ function hasUiAccess(request) {
     const credentials = Buffer.from(authorization.slice(6), 'base64').toString('utf8');
     const separator = credentials.indexOf(':');
     if (separator < 0) return false;
-    const username = credentials.slice(0, separator);
-    const password = credentials.slice(separator + 1);
-    return secureEqual(username, uiUsername) && secureEqual(password, uiPassword);
+    return secureEqual(credentials.slice(0, separator), uiUsername)
+      && secureEqual(credentials.slice(separator + 1), uiPassword);
   } catch {
     return false;
   }
@@ -69,11 +54,6 @@ function requestUiAccess(response) {
   response.end('Authentication required');
 }
 
-function json(response, status, body) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  response.end(JSON.stringify(body));
-}
-
 function html(response) {
   response.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
@@ -81,114 +61,94 @@ function html(response) {
     'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
     'X-Content-Type-Options': 'nosniff',
   });
-  response.end(PAGE);
+  response.end(renderPage());
 }
 
-function readJsonBody(request) {
-  return new Promise((resolve, reject) => {
-    let size = 0;
-    const chunks = [];
-    request.on('data', (chunk) => {
-      size += chunk.length;
-      if (size > maxBodyBytes) {
-        reject(Object.assign(new Error('Payload too large'), { status: 413 }));
-        request.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    request.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-      catch { reject(Object.assign(new Error('Invalid JSON'), { status: 400 })); }
-    });
-    request.on('error', reject);
-  });
-}
-
-function compactData(data) {
-  if (!data || typeof data !== 'object') return '';
-  const denied = new Set(['body', 'messageBody', 'htmlBody', 'raw', 'password', 'token', 'secret', 'authorization']);
-  const safe = Object.fromEntries(Object.entries(data)
-    .filter(([key]) => !denied.has(key.toLowerCase()))
-    .slice(0, 12)
-    .map(([key, value]) => [key, typeof value === 'string' ? value.slice(0, 320) : value]));
-  const result = JSON.stringify(safe, null, 2);
-  return result === '{}' ? '' : result.slice(0, 2200);
-}
-
-function normaliseEvent(event) {
+function eventFromSystemPayload(payload) {
   return {
-    id: typeof event?.id === 'string' ? event.id : crypto.randomUUID(),
-    type: typeof event?.type === 'string' ? event.type : 'unknown.event',
-    createdAt: typeof event?.createdAt === 'string' ? event.createdAt : new Date().toISOString(),
-    details: compactData(event?.data),
+    id: typeof payload?.id === 'string' ? payload.id : crypto.randomUUID(),
+    type: typeof payload?.type === 'string' ? payload.type : 'system.unknown',
+    severity: typeof payload?.severity === 'string' ? payload.severity : 'error',
+    createdAt: typeof payload?.createdAt === 'string' ? payload.createdAt : new Date().toISOString(),
+    data: payload?.data && typeof payload.data === 'object' ? payload.data : { message: payload?.message },
   };
 }
 
-function formatTelegram(events, test = false) {
-  if (test) return '✅ Mail Alerts: Telegram connection works.';
-  const lines = ['🚨 Stalwart alert'];
-  for (const event of events.slice(0, 8)) {
-    lines.push(`\n• ${event.type}\n${event.createdAt}`);
-    if (event.details) lines.push(event.details);
-  }
-  return lines.join('\n').slice(0, 3900);
+function credentialsForStalwart() {
+  const url = process.env.STALWART_JMAP_URL;
+  const token = process.env.STALWART_API_TOKEN;
+  return url && token ? { url, token } : null;
 }
 
-async function sendTelegram(message) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+async function blockLoginIp(action) {
+  const credentials = credentialsForStalwart();
+  if (!credentials) throw new Error('Stalwart API is not configured');
+  const expiresAt = new Date(Date.now() + action.durationHours * 60 * 60 * 1000).toISOString();
+  await blockIp({ ...credentials, address: action.ip, expiresAt });
+  await state.recordAction({
+    type: 'ip.blocked',
+    account: action.account,
+    ip: action.ip,
+    durationHours: action.durationHours,
+    expiresAt,
+  });
+  return expiresAt;
+}
+
+async function receiveStalwart(request, response) {
   try {
-    const response = await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: telegramChatId, text: message }),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Telegram API returned ${response.status}`);
-    state.telegramSent += 1;
-    state.lastError = null;
+    const raw = await readJsonBody(request, maxBodyBytes);
+    if (!verifyHmac(raw.body, request.headers['x-signature'], webhookSecret)) {
+      return json(response, 401, { error: 'Invalid Stalwart signature' });
+    }
+    const payload = raw.json;
+    if (!Array.isArray(payload.events) || payload.events.length === 0) return json(response, 400, { error: 'No events supplied' });
+    const result = await state.recordStalwartEvents(payload.events);
+    await telegram.sendCritical(result.critical);
+    for (const login of result.newLogins) await telegram.sendNewLogin(login);
+    return json(response, 202, { accepted: result.accepted, newLogins: result.newLogins.length });
   } catch (error) {
-    state.telegramFailed += 1;
-    state.lastError = `Telegram: ${error instanceof Error ? error.message : 'unknown error'}`;
-    throw error;
-  } finally {
-    clearTimeout(timer);
+    await state.setError(error);
+    return json(response, error?.status || 502, { error: error instanceof Error ? error.message : 'Webhook processing failed' });
   }
 }
 
-async function handleWebhook(request, response) {
+async function receiveSystem(request, response) {
   if (!secureEqual(request.headers['x-alert-secret'], webhookSecret)) return json(response, 401, { error: 'Unauthorized' });
   try {
-    const payload = await readJsonBody(request);
-    const events = Array.isArray(payload.events) ? payload.events.map(normaliseEvent) : [];
-    if (events.length === 0) return json(response, 400, { error: 'No events supplied' });
-    state.received += events.length;
-    state.events.unshift(...events);
-    state.events.splice(maxEvents);
-    await sendTelegram(formatTelegram(events));
-    await saveState();
-    return json(response, 202, { accepted: events.length });
+    const { json: payload } = await readJsonBody(request, maxBodyBytes);
+    const event = await state.recordSystemEvent(eventFromSystemPayload(payload));
+    await telegram.sendCritical([event]);
+    return json(response, 202, { accepted: 1 });
   } catch (error) {
-    state.lastError = error instanceof Error ? error.message : 'Webhook processing failed';
-    await saveState().catch(() => {});
-    return json(response, error?.status || 502, { error: state.lastError });
+    await state.setError(error);
+    return json(response, error?.status || 502, { error: error instanceof Error ? error.message : 'Webhook processing failed' });
   }
 }
 
-const PAGE = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mail Alerts</title><style>body{margin:0;background:#f5f7fb;color:#172033;font:14px system-ui,sans-serif}.wrap{max-width:1000px;margin:0 auto;padding:32px 20px}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}h1{margin:0;font-size:24px}.status{color:#16803c}.error{color:#bf3131}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card,section{background:#fff;border:1px solid #dce2ed;border-radius:12px;padding:16px;box-shadow:0 1px 2px #17203308}.num{font-size:26px;font-weight:700;margin-top:8px}section{margin-top:16px}button{background:#2463eb;color:#fff;border:0;border-radius:8px;padding:9px 13px;font-weight:600;cursor:pointer}button:disabled{opacity:.6}.event{border-top:1px solid #e8ecf3;padding:13px 0}.event:first-child{border:0}.event h3{font-size:14px;margin:0 0 4px}.event time{color:#64748b;font-size:12px}.event pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f7f9fc;border-radius:6px;padding:8px;font-size:12px;margin:8px 0 0}@media(max-width:680px){.grid{grid-template-columns:repeat(2,1fr)}}</style></head><body><main class="wrap"><header><div><h1>Mail Alerts</h1><p id="connection">Loading status…</p></div><button id="test">Send test to Telegram</button></header><div class="grid" id="stats"></div><section><h2>Last events</h2><div id="events"></div></section></main><script>const esc=(v)=>String(v??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));async function refresh(){const r=await fetch('/api/status');const s=await r.json();document.querySelector('#connection').innerHTML=s.lastError?'<span class="error">'+esc(s.lastError)+'</span>':'<span class="status">Telegram connection ready</span>';document.querySelector('#stats').innerHTML=[['Received',s.received],['Telegram sent',s.telegramSent],['Telegram failed',s.telegramFailed],['Started',new Date(s.startedAt).toLocaleString()]].map(([n,v])=>'<div class="card"><span>'+n+'</span><div class="num">'+esc(v)+'</div></div>').join('');document.querySelector('#events').innerHTML=s.events.length?s.events.map(e=>'<article class="event"><h3>'+esc(e.type)+'</h3><time>'+esc(new Date(e.createdAt).toLocaleString())+'</time>'+(e.details?'<pre>'+esc(e.details)+'</pre>':'')+'</article>').join(''):'<p>No events received yet.</p>'}document.querySelector('#test').onclick=async e=>{e.target.disabled=true;try{const r=await fetch('/api/test',{method:'POST'});if(!r.ok)throw new Error((await r.json()).error);await refresh()}catch(err){alert('Test failed: '+err.message)}finally{e.target.disabled=false}};refresh();setInterval(refresh,10000)</script></body></html>`;
+await state.load();
+telegram.startPolling({
+  enabled: telegramPolling,
+  onAllow: async (action) => state.trustIp(action.account, action.ip),
+  onBlock: blockLoginIp,
+});
 
-await loadState();
 createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   if (request.method === 'GET' && url.pathname === '/health') return json(response, 200, { ok: true });
-  if (request.method === 'POST' && url.pathname === '/webhook/stalwart') return handleWebhook(request, response);
+  if (request.method === 'POST' && url.pathname === '/webhook/stalwart') return receiveStalwart(request, response);
+  if (request.method === 'POST' && url.pathname === '/webhook/system') return receiveSystem(request, response);
   if (!hasUiAccess(request)) return requestUiAccess(response);
   if (request.method === 'GET' && url.pathname === '/') return html(response);
-  if (request.method === 'GET' && url.pathname === '/api/status') return json(response, 200, state);
+  if (request.method === 'GET' && url.pathname === '/api/status') return json(response, 200, state.publicStatus());
   if (request.method === 'POST' && url.pathname === '/api/test') {
-    try { await sendTelegram(formatTelegram([], true)); await saveState(); return json(response, 200, { ok: true }); }
-    catch { await saveState().catch(() => {}); return json(response, 502, { error: state.lastError }); }
+    try {
+      await telegram.sendTest();
+      return json(response, 200, { ok: true });
+    } catch (error) {
+      await state.setError(error);
+      return json(response, 502, { error: error instanceof Error ? error.message : 'Telegram test failed' });
+    }
   }
   return json(response, 404, { error: 'Not found' });
 }).listen(port, '0.0.0.0', () => console.log(`Mail alerts listening on ${port}`));
