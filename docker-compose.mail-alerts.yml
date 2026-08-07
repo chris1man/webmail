@@ -1,6 +1,6 @@
 services:
   mail-alerts:
-    image: ghcr.io/chris1man/mail-alerts:smart-title-gallery
+    image: ghcr.io/chris1man/mail-alerts:mail-alerts-telegram
     pull_policy: always
     restart: unless-stopped
     environment:
