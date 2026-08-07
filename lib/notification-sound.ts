@@ -11,6 +11,11 @@ export const NOTIFICATION_SOUNDS: { id: NotificationSoundChoice; file?: string }
   { id: 'relax', file: '/notification/relax-message-tone.mp3' },
 ];
 
+// The mail deployment uses one approved sound for incoming messages. Keep it
+// separate from generic notifications so calendar alerts can retain the user's
+// selected sound.
+const INCOMING_EMAIL_SOUND = '/notification/new-email.mp3';
+
 function playBeep() {
   const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
   const oscillator = audioContext.createOscillator();
@@ -63,5 +68,13 @@ export function playNotificationSound(sound?: NotificationSoundChoice) {
     }
   } catch (e) {
     debug.log('push', 'Could not play notification sound:', e);
+  }
+}
+
+export function playIncomingEmailSound() {
+  try {
+    playFile(INCOMING_EMAIL_SOUND);
+  } catch (e) {
+    debug.log('push', 'Could not play incoming email sound:', e);
   }
 }

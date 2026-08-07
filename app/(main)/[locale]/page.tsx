@@ -31,7 +31,7 @@ import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { usePromptDialog } from "@/hooks/use-prompt-dialog";
 import { useBrowserNavigation, type NavSnapshot } from "@/hooks/use-browser-navigation";
 import { debug } from "@/lib/debug";
-import { playNotificationSound } from "@/lib/notification-sound";
+import { playIncomingEmailSound } from "@/lib/notification-sound";
 import { cn } from "@/lib/utils";
 import { localizeMailboxName } from "@/lib/mailbox-label";
 import {
@@ -1177,9 +1177,9 @@ export default function Home() {
   // Handle new email notifications - play sound
   useEffect(() => {
     if (newEmailNotification) {
-      const { emailNotificationsEnabled, emailNotificationSound, notificationSoundChoice } = useSettingsStore.getState();
+      const { emailNotificationsEnabled, emailNotificationSound } = useSettingsStore.getState();
       if (emailNotificationsEnabled && emailNotificationSound) {
-        playNotificationSound(notificationSoundChoice);
+        playIncomingEmailSound();
       }
       debug.log('email', 'New email received:', newEmailNotification.subject);
       clearNewEmailNotification();
