@@ -47,7 +47,10 @@ jobs:
       - name: Trigger Portainer redeploy
         env:
           PORTAINER_WEBHOOK_BULWARK_TEST: ${{ secrets.PORTAINER_WEBHOOK_BULWARK_TEST }}
+          PORTAINER_WEBHOOK_BASIC_AUTH: ${{ secrets.PORTAINER_WEBHOOK_BASIC_AUTH }}
         run: |
           test -n "$PORTAINER_WEBHOOK_BULWARK_TEST"
+          test -n "$PORTAINER_WEBHOOK_BASIC_AUTH"
           curl --fail --silent --show-error --retry 3 --retry-all-errors \
+            --user "$PORTAINER_WEBHOOK_BASIC_AUTH" \
             --request POST "$PORTAINER_WEBHOOK_BULWARK_TEST"
