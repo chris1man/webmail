@@ -64,3 +64,23 @@ Send the request with `X-Alert-Secret` equal to `WEBHOOK_SECRET`. A health monit
 ## 5. What must remain separate
 
 The notifier deliberately does not read Docker state or the host filesystem. A small host-side timer/checker should probe public URLs and `df`, while the backup script sends its own outcome. This separation prevents the Internet-facing notifier from receiving privileged Docker-socket or root-filesystem access.
+
+## 6. Host health and disk checker
+
+`services/mail-alerts/scripts/check-host.sh` runs once per minute from the VPS host. Copy it to `/usr/local/bin/mail-alerts-check`, make it executable and put secrets into a root-only file such as `/etc/mail-alerts-monitor.env`:
+
+```sh
+MAIL_ALERTS_URL=https://alerts.example.com
+WEBHOOK_SECRET=the-same-long-secret
+MAIL_ALERTS_CHECK_URLS='Portainer|https://portainer.example.com/;Webmail|https://webmail.example.com/;Stalwart|https://mail.example.com/.well-known/jmap'
+MAIL_ALERTS_DISK_WARNING_PERCENT=80
+MAIL_ALERTS_DISK_CRITICAL_PERCENT=90
+```
+
+Then add this cron entry:
+
+```cron
+* * * * * root . /etc/mail-alerts-monitor.env && /usr/local/bin/mail-alerts-check
+```
+
+The checker sends an alert only when a URL changes from up to down or back to up, and when disk usage crosses a threshold. It has no Docker socket or filesystem mount inside a container.
