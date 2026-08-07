@@ -27,6 +27,15 @@ curl -X POST https://alerts.example.com/webhook/system \
 
 `TELEGRAM_API_BASE` exists only for local tests; do not set it in production.
 
+## Bulwark login alerts
+
+For reliable webmail-login alerts, configure the Webmail stack with these optional variables:
+
+- `MAIL_ALERTS_URL` – private notifier URL, for example `http://mail-alerts-mail-alerts-1:8080` when both containers share `proxy-network`.
+- `MAIL_ALERTS_SECRET` – the exact `WEBHOOK_SECRET` from this stack.
+
+Bulwark verifies the JMAP credentials before creating its own browser session, then sends a best-effort authenticated system event containing the account, client IP and browser user-agent. A temporary notifier outage never prevents a user from logging in.
+
 To enable the Telegram IP-block action additionally configure:
 
 - `STALWART_JMAP_URL` – normally `http://stalwart:8080/jmap` over the private `mail-network`.

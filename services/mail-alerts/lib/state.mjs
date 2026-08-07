@@ -24,7 +24,25 @@ function extractLogin(data) {
   const account = accountValue === undefined ? undefined : String(accountValue);
   const ip = ['remoteIp', 'remoteIP', 'ip', 'remote_ip']
     .map((key) => data[key]).find((value) => typeof value === 'string' && value.length > 0);
-  return account && ip ? { account, ip } : null;
+  const device = ['userAgent', 'device', 'user_agent']
+    .map((key) => data[key]).find((value) => typeof value === 'string' && value.length > 0);
+  return account && ip ? { account, ip, device: device?.slice(0, 512) } : null;
+}
+
+function loginKey(login) {
+  return login.device ? `${login.ip}\u0000${login.device}` : login.ip;
+}
+
+function isPrivateOrLoopbackIp(ip) {
+  const octets = ip.split('.').map(Number);
+  if (octets.length === 4 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    return octets[0] === 10
+      || octets[0] === 127
+      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168);
+  }
+  const value = ip.toLowerCase();
+  return value === '::1' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe80:');
 }
 
 function normaliseEvent(event) {
@@ -105,7 +123,12 @@ export function createStateStore(path) {
         const stored = rememberEvent(event);
         if (event.type === 'auth.success') {
           const login = extractLogin(event.data);
-          if (login && !state.knownIps[login.account]?.[login.ip]) newLogins.push({ ...login, createdAt: event.createdAt });
+          // A reverse proxy can authenticate on behalf of webmail and expose
+          // only its Docker IP. Those logins are reported by Bulwark with the
+          // real browser IP through webmail.login.success instead.
+          if (login && !isPrivateOrLoopbackIp(login.ip) && !state.knownIps[login.account]?.[loginKey(login)]) {
+            newLogins.push({ ...login, createdAt: event.createdAt });
+          }
         } else {
           critical.push(stored);
         }
@@ -113,9 +136,20 @@ export function createStateStore(path) {
       await save();
       return { accepted: critical.length + newLogins.length, critical, newLogins };
     },
-    async trustIp(account, ip) {
+    async recordLoginEvent(event) {
+      const normalised = normaliseEvent(event);
+      state.received += 1;
+      const stored = rememberEvent(normalised);
+      const login = extractLogin(normalised.data);
+      const newLogin = login && !state.knownIps[login.account]?.[loginKey(login)]
+        ? { ...login, createdAt: normalised.createdAt }
+        : null;
+      await save();
+      return { event: stored, newLogin };
+    },
+    async trustIp(account, ip, device) {
       const known = state.knownIps[account] || {};
-      known[ip] = new Date().toISOString();
+      known[loginKey({ ip, device })] = new Date().toISOString();
       const entries = Object.entries(known).sort(([, a], [, b]) => String(b).localeCompare(String(a))).slice(0, maxKnownIpsPerAccount);
       state.knownIps[account] = Object.fromEntries(entries);
       await this.recordAction({ type: 'ip.trusted', account, ip });

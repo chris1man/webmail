@@ -35,6 +35,7 @@ export function createTelegramClient({ token, chatId, state, apiBase }) {
       '🔐 Новый IP при входе в почту',
       `Пользователь: ${login.account}`,
       `IP: ${login.ip}`,
+      ...(login.device ? [`Устройство: ${login.device}`] : []),
       `Время: ${login.createdAt}`,
       '',
       'Если это ожидаемый вход, подтвердите IP. Блокировка не изменит пароль или учётную запись.',
