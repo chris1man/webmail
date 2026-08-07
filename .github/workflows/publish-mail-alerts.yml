@@ -43,7 +43,10 @@ jobs:
         if: github.ref == 'refs/heads/codex/mail-alerts-telegram'
         env:
           PORTAINER_WEBHOOK_MAIL_ALERTS: ${{ secrets.PORTAINER_WEBHOOK_MAIL_ALERTS }}
+          PORTAINER_WEBHOOK_BASIC_AUTH: ${{ secrets.PORTAINER_WEBHOOK_BASIC_AUTH }}
         run: |
           test -n "$PORTAINER_WEBHOOK_MAIL_ALERTS"
+          test -n "$PORTAINER_WEBHOOK_BASIC_AUTH"
           curl --fail --silent --show-error --retry 3 --retry-all-errors \
+            --user "$PORTAINER_WEBHOOK_BASIC_AUTH" \
             --request POST "$PORTAINER_WEBHOOK_MAIL_ALERTS"
