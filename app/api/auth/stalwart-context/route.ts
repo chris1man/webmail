@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
-import { JmapAuthVerificationError, assertBasicAuthMatchesUsername, normalizeJmapServerUrl, validateProxyAuthHeader, verifyJmapAuth } from '@/lib/auth/verify-jmap-auth';
+import { JmapAuthVerificationError, assertBasicAuthMatchesUsername, validateProxyAuthHeader, verifyJmapAuth } from '@/lib/auth/verify-jmap-auth';
 import { setStalwartAuthContext } from '@/lib/stalwart/auth-context';
 import { configManager } from '@/lib/admin/config-manager';
 import { isPublicHttpUrl } from '@/lib/security/url-guard';
 import { recordLogin } from '@/lib/telemetry/login-tracker';
+import { notifyMailAlertsLogin, requestClientIp } from '@/lib/telemetry/mail-alerts';
 import { parseJmapServers, resolveTrustedJmapUrl } from '@/lib/admin/jmap-servers';
 import { MAX_ACCOUNT_SLOTS } from '@/lib/account-utils';
 
@@ -57,22 +58,12 @@ export async function POST(request: NextRequest) {
     }
 
     const slot = getSlot(request, bodySlot);
-    // Trusted (admin-configured) URLs skip the upstream re-fetch, but we
-    // still bind the cookie's `username` to the credential when we can verify
-    // locally. Without this, a caller can POST username="admin@host" +
-    // authHeader=<their own Basic creds>, and downstream consumers that read
-    // the cookie-derived username (audit logs, login tracker) accept the
-    // spoof. Bearer tokens are opaque so only the format check runs;
-    // authorization sinks must key off the credential itself, not the
-    // cookie's username claim (see admin/auth's authHeader-hashed cache key).
-    let normalizedServerUrl: string;
-    if (upstreamTrusted) {
-      validateProxyAuthHeader(authHeader);
-      assertBasicAuthMatchesUsername(authHeader, username);
-      normalizedServerUrl = normalizeJmapServerUrl(upstreamUrl);
-    } else {
-      normalizedServerUrl = await verifyJmapAuth(upstreamUrl, authHeader, { trusted: false });
-    }
+    // This route is called after the browser has connected to JMAP. Verify the
+    // supplied credential again server-side before recording or alerting it;
+    // otherwise an unauthenticated caller could manufacture a login alert.
+    validateProxyAuthHeader(authHeader);
+    assertBasicAuthMatchesUsername(authHeader, username);
+    const normalizedServerUrl = await verifyJmapAuth(upstreamUrl, authHeader, { trusted: upstreamTrusted });
 
     await setStalwartAuthContext(slot, {
       serverUrl: normalizedServerUrl,
@@ -81,6 +72,11 @@ export async function POST(request: NextRequest) {
     });
 
     void recordLogin(username, normalizedServerUrl);
+    await notifyMailAlertsLogin({
+      account: username,
+      ip: requestClientIp(request),
+      userAgent: request.headers.get('user-agent'),
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

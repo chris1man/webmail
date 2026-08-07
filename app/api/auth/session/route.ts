@@ -15,7 +15,6 @@ import {
 import { configManager } from '@/lib/admin/config-manager';
 import { isPublicHttpUrl } from '@/lib/security/url-guard';
 import { recordLogin } from '@/lib/telemetry/login-tracker';
-import { notifyMailAlertsLogin, requestClientIp } from '@/lib/telemetry/mail-alerts';
 import { parseJmapServers, resolveTrustedJmapUrl } from '@/lib/admin/jmap-servers';
 import { MAX_ACCOUNT_SLOTS } from '@/lib/account-utils';
 
@@ -94,12 +93,6 @@ export async function POST(request: NextRequest) {
     });
 
     void recordLogin(username, normalizedServerUrl);
-    await notifyMailAlertsLogin({
-      account: username,
-      ip: requestClientIp(request),
-      userAgent: request.headers.get('user-agent'),
-    });
-
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof JmapAuthVerificationError) {
