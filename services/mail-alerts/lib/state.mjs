@@ -46,6 +46,18 @@ function loginKey(login) {
   return login.fingerprint?.visitorId ? `${login.ip}\u0000${login.fingerprint.visitorId}` : login.ip;
 }
 
+function isPrivateOrLoopbackIp(ip) {
+  const octets = ip.split('.').map(Number);
+  if (octets.length === 4 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    return octets[0] === 10
+      || octets[0] === 127
+      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168);
+  }
+  const normalised = ip.toLowerCase();
+  return normalised === '::1' || normalised.startsWith('fc') || normalised.startsWith('fd') || normalised.startsWith('fe80:');
+}
+
 function normaliseEvent(event) {
   return {
     id: typeof event?.id === 'string' ? event.id : crypto.randomUUID(),
@@ -125,7 +137,12 @@ export function createStateStore(path) {
         const stored = rememberEvent(event);
         if (event.type === 'auth.success') {
           const login = extractLogin(event.data);
-          if (login && !state.knownIps[login.account]?.[loginKey(login)]) newLogins.push({ ...login, createdAt: event.createdAt });
+          // A reverse proxy authenticates the browser with an internal Docker
+          // address. The matching Bulwark event has the real forwarded IP and
+          // fingerprint, so never emit a duplicate from this server event.
+          if (login && !isPrivateOrLoopbackIp(login.ip) && !state.knownIps[login.account]?.[loginKey(login)]) {
+            newLogins.push({ ...login, createdAt: event.createdAt });
+          }
         } else {
           critical.push(stored);
         }
