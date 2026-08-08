@@ -91,7 +91,7 @@ import { useTour } from "@/components/tour/tour-provider";
 import { useIsEmbedded } from "@/hooks/use-is-embedded";
 import { findCalendarAttachment, isCalendarMimeType } from "@/lib/calendar-invitation";
 import { RecipientPopover } from "./recipient-popover";
-import { getFilePreviewKind, isFilePreviewable, isMimeTypeSafeForInlinePreview } from "@/lib/file-preview";
+import { getFilePreviewKind, isFilePreviewable, isHeicImage, isMimeTypeSafeForInlinePreview } from "@/lib/file-preview";
 import { parseTnef, isTnefAttachment } from "@/lib/tnef";
 import { debug } from "@/lib/debug";
 import type { TnefAttachment } from "@/lib/tnef";
@@ -1920,7 +1920,15 @@ export function EmailViewer({
       try {
         let url: string | null = null;
         if (attachment.blobId && blobClient) {
-          url = await blobClient.fetchBlobAsObjectUrl(attachment.blobId, attachment.name || 'image', attachment.type, blobAccountId);
+          if (isHeicImage(attachment.name ?? undefined, attachment.type) && thumbnailAccountId && thumbnailSlot !== undefined) {
+            const response = await fetch(
+              `/api/heic-preview?slot=${thumbnailSlot}&blobId=${encodeURIComponent(attachment.blobId)}&accountId=${encodeURIComponent(thumbnailAccountId)}&name=${encodeURIComponent(attachment.name || 'image.heic')}&type=${encodeURIComponent(attachment.type || 'image/heic')}`,
+            );
+            if (!response.ok) return null;
+            url = URL.createObjectURL(await response.blob());
+          } else {
+            url = await blobClient.fetchBlobAsObjectUrl(attachment.blobId, attachment.name || 'image', attachment.type, blobAccountId);
+          }
         } else {
           const bytes = attachment.tnefData ?? (attachment.decryptedAttachment ? getAttachmentContentBytes(attachment.decryptedAttachment) : null);
           if (!bytes) return null;
@@ -1941,7 +1949,7 @@ export function EmailViewer({
     })();
     galleryLoadsRef.current.set(item.id, request);
     return request;
-  }, [blobAccountId, blobClient, effectiveAttachments]);
+  }, [blobAccountId, blobClient, effectiveAttachments, thumbnailAccountId, thumbnailSlot]);
 
   const openImageGallery = useCallback((attachment: EffectiveAttachment) => {
     galleryRequestRef.current += 1;

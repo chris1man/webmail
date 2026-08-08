@@ -1,6 +1,6 @@
 export type FilePreviewKind = 'image' | 'html' | 'eml' | 'text' | 'markdown' | 'pdf' | 'office' | 'audio' | 'video' | 'unsupported';
 
-const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico']);
+const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'avif', 'bmp', 'ico', 'heic', 'heif']);
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'opus']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'ogv', 'mov', 'm4v', 'avi', 'mkv']);
 const TEXT_EXTENSIONS = new Set([
@@ -98,4 +98,15 @@ export function isMimeTypeSafeForInlinePreview(type?: string): boolean {
   if (INLINE_PREVIEW_UNSAFE_MIME_TYPES.has(mimeType)) return false;
   if (INLINE_PREVIEW_SAFE_MIME_TYPES.has(mimeType)) return true;
   return INLINE_PREVIEW_SAFE_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
+}
+
+export function isHeicImage(name?: string, type?: string): boolean {
+  const mimeType = normalizeMimeType(type);
+  const ext = getExtension(name);
+  return mimeType === 'image/heic'
+    || mimeType === 'image/heif'
+    || mimeType === 'image/heic-sequence'
+    || mimeType === 'image/heif-sequence'
+    || ext === 'heic'
+    || ext === 'heif';
 }

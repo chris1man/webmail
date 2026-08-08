@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { getStalwartCredentials } from '@/lib/stalwart/credentials';
 import { fetchJmapSession } from '@/lib/stalwart/jmap-api';
+import { convertHeicToJpeg } from '@/lib/heic-conversion';
+import { isHeicImage } from '@/lib/file-preview';
 
 export const runtime = 'nodejs';
 
@@ -59,7 +61,10 @@ export async function GET(request: NextRequest) {
       return new NextResponse(null, { status: 413 });
     }
 
-    const thumbnail = await sharp(input, { limitInputPixels: 40_000_000 })
+    const previewInput = isHeicImage(name, type)
+      ? await convertHeicToJpeg(input)
+      : input;
+    const thumbnail = await sharp(previewInput, { limitInputPixels: 40_000_000 })
       .rotate()
       .resize(THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, { fit: 'inside', withoutEnlargement: true })
       .webp({ quality: 72 })

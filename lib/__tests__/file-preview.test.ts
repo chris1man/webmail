@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { getFilePreviewKind, isFilePreviewable } from '../file-preview';
+import { getFilePreviewKind, isFilePreviewable, isHeicImage } from '../file-preview';
 
 describe('file preview detection', () => {
   it('detects browser-renderable image attachments', () => {
     expect(getFilePreviewKind('photo.avif', 'image/avif')).toBe('image');
     expect(getFilePreviewKind('vector.svg')).toBe('image');
+    expect(getFilePreviewKind('photo.HEIC', 'application/octet-stream')).toBe('image');
+    expect(isHeicImage('photo.HEIC', 'application/octet-stream')).toBe(true);
+    expect(isHeicImage('photo.jpg', 'image/jpeg')).toBe(false);
   });
 
   it('detects html attachments', () => {

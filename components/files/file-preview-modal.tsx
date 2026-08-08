@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { X, Download, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getFilePreviewKind, isMimeTypeSafeForInlinePreview } from "@/lib/file-preview";
+import { getFilePreviewKind, isHeicImage, isMimeTypeSafeForInlinePreview } from "@/lib/file-preview";
 import dynamic from "next/dynamic";
 import { EmlPreview, type ParsedEml } from "@/components/files/eml-preview";
 
@@ -28,6 +28,8 @@ const EXT_TO_MIME: Record<string, string> = {
   gif: "image/gif",
   webp: "image/webp",
   avif: "image/avif",
+  heic: "image/heic",
+  heif: "image/heif",
   bmp: "image/bmp",
   mp3: "audio/mpeg",
   wav: "audio/wav",
@@ -238,7 +240,18 @@ export function FilePreviewModal({ name, onClose, onDownload, getFileContent }: 
           const typedBlob = blob.type !== effectiveType
             ? new Blob([blob], { type: effectiveType })
             : blob;
-          revokeUrl = URL.createObjectURL(typedBlob);
+          if (previewType === 'image' && isHeicImage(name, effectiveType)) {
+            const conversionForm = new FormData();
+            conversionForm.set('file', typedBlob, name);
+            const conversion = await fetch('/api/heic-preview', {
+              method: 'POST',
+              body: conversionForm,
+            });
+            if (!conversion.ok) throw new Error('HEIC conversion failed');
+            revokeUrl = URL.createObjectURL(await conversion.blob());
+          } else {
+            revokeUrl = URL.createObjectURL(typedBlob);
+          }
           if (!cancelled) {
             setObjectUrl(revokeUrl);
             setCanOpenInNewTab(isMimeTypeSafeForInlinePreview(effectiveType));
