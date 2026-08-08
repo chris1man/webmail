@@ -1,0 +1,40 @@
+services:
+  webmail:
+    # Built by GitHub Actions; Portainer only pulls the finished image.
+    image: ghcr.io/chris1man/webmail:smart-title-gallery
+    pull_policy: always
+    ports:
+      - "3001:3000"
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      # Internal-only Gotenberg service from docker-compose.document-preview.yml.
+      DOCUMENT_PREVIEW_URL: http://document-preview:3000
+      # Optional authenticated browser-login reports for Mail Alerts.
+      MAIL_ALERTS_URL: ${MAIL_ALERTS_URL:-}
+      MAIL_ALERTS_SECRET: ${MAIL_ALERTS_SECRET:-}
+    networks:
+      - proxy-network
+    volumes:
+      # Isolated state: never mount the production Bulwark volumes here.
+      - bulwark-settings-test:/app/data/settings
+      - bulwark-admin-test:/app/data/admin
+      - bulwark-admin-state-test:/app/data/admin-state
+      - bulwark-telemetry-test:/app/data/telemetry
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  bulwark-settings-test:
+  bulwark-admin-test:
+  bulwark-admin-state-test:
+  bulwark-telemetry-test:
+
+networks:
+  proxy-network:
+    external: true

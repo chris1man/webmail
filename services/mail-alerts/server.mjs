@@ -1,5 +1,4 @@
 import { createServer } from 'node:http';
-import { randomBytes } from 'node:crypto';
 import { readJsonBody, secureEqual, verifyHmac } from './lib/http.mjs';
 import { createStateStore } from './lib/state.mjs';
 import { createTelegramClient } from './lib/telegram.mjs';
@@ -56,14 +55,13 @@ function requestUiAccess(response) {
 }
 
 function html(response) {
-  const scriptNonce = randomBytes(16).toString('base64');
   response.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
-    'Content-Security-Policy': `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-${scriptNonce}'; base-uri 'none'; frame-ancestors 'none'`,
+    'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'",
     'X-Content-Type-Options': 'nosniff',
   });
-  response.end(renderPage(scriptNonce));
+  response.end(renderPage());
 }
 
 function eventFromSystemPayload(payload) {
@@ -122,8 +120,8 @@ async function receiveSystem(request, response) {
     const event = eventFromSystemPayload(payload);
     if (event.type === 'webmail.login.success') {
       const result = await state.recordLoginEvent(event);
-      if (result.newLogin) await telegram.sendNewLogin(result.newLogin);
-      return json(response, 202, { accepted: 1, newLogins: result.newLogin ? 1 : 0 });
+      if (result.login) await telegram.sendNewLogin(result.login);
+      return json(response, 202, { accepted: 1, logins: result.login ? 1 : 0 });
     }
     const stored = await state.recordSystemEvent(event);
     await telegram.sendCritical([stored]);
@@ -137,7 +135,7 @@ async function receiveSystem(request, response) {
 await state.load();
 telegram.startPolling({
   enabled: telegramPolling,
-  onAllow: async (action) => state.trustIp(action.account, action.ip),
+  onAllow: async (action) => state.trustIp(action.account, action.ip, action.fingerprint),
   onBlock: blockLoginIp,
 });
 

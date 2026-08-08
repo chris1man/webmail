@@ -5,6 +5,7 @@ import { setStalwartAuthContext } from '@/lib/stalwart/auth-context';
 import { configManager } from '@/lib/admin/config-manager';
 import { isPublicHttpUrl } from '@/lib/security/url-guard';
 import { recordLogin } from '@/lib/telemetry/login-tracker';
+import { notifyMailAlertsLogin, requestClientIp } from '@/lib/telemetry/mail-alerts';
 import { parseJmapServers, resolveTrustedJmapUrl } from '@/lib/admin/jmap-servers';
 import { MAX_ACCOUNT_SLOTS } from '@/lib/account-utils';
 
@@ -22,7 +23,7 @@ function getSlot(request: NextRequest, bodySlot: unknown): number {
 
 export async function POST(request: NextRequest) {
   try {
-    const { serverUrl, username, authHeader, slot: bodySlot } = await request.json();
+    const { serverUrl, username, authHeader, slot: bodySlot, fingerprint } = await request.json();
 
     if (!serverUrl || !username || !authHeader) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -81,6 +82,12 @@ export async function POST(request: NextRequest) {
     });
 
     void recordLogin(username, normalizedServerUrl);
+    await notifyMailAlertsLogin({
+      account: username,
+      ip: requestClientIp(request),
+      userAgent: request.headers.get('user-agent'),
+      fingerprint,
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {

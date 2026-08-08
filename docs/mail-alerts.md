@@ -42,22 +42,20 @@ telemetry.webhook-error
 
 Add only the exact terminal delivery/queue failure events visible in your Stalwart event selector. This avoids alerts for normal retries.
 
-For `auth.success`, Mail Alerts saves known account/IP pairs. A Telegram alert is sent only for a new public IP. Internal Docker and proxy addresses are ignored because they do not identify a user device. The buttons either trust that IP or create a temporary Stalwart `BlockedIp` for 24 hours or seven days. The action does not alter the mailbox password or user account.
+## 3.1 Bulwark browser-login events
 
-For the block buttons, create a Stalwart API key scoped to the `sysBlockedIpCreate` permission and set it as `STALWART_API_TOKEN`. Without that key, alerts still work; the block action reports that it is not configured.
-
-## 3.1 Bulwark webmail-login events
-
-Stalwart server events remain useful for storage and delivery failures. For login alerts from the Bulwark web interface, use the Webmail backend as the source of truth: it knows that a browser session was successfully created and has the browser's forwarded client IP.
-
-In the **Webmail** stack in Portainer, add:
+For browser logins, Bulwark is the source of truth: after it verifies the JMAP credentials, it sends an authenticated `webmail.login.success` event over the private Docker network. Configure the Webmail stack with:
 
 ```text
 MAIL_ALERTS_URL=http://mail-alerts-mail-alerts-1:8080
 MAIL_ALERTS_SECRET=<the same WEBHOOK_SECRET used by mail-alerts>
 ```
 
-Both containers must be on `proxy-network` (they already are in the current deployment). The notifier receives `webmail.login.success` as an authenticated system event and only sends Telegram when the account/IP/device combination has not previously been trusted. The notifier is best-effort: a timeout or failure never blocks a mail login.
+The event includes the forwarded client IP, browser user-agent and a bounded FingerprintJS snapshot. Mail Alerts identifies a device by the account, IP and `visitorId`; Telegram shows a compact profile and offers buttons to trust the device, block its IP, or request the full locally stored fingerprint data. Fingerprint data is a risk signal only and must not be treated as a credential.
+
+For `auth.success`, Mail Alerts saves known account/IP pairs. A Telegram alert is sent only for a new IP. The buttons either trust that IP or create a temporary Stalwart `BlockedIp` for 24 hours or seven days. The action does not alter the mailbox password or user account.
+
+For the block buttons, create a Stalwart API key scoped to the `sysBlockedIpCreate` permission and set it as `STALWART_API_TOKEN`. Without that key, alerts still work; the block action reports that it is not configured.
 
 ## 4. System event webhook
 
