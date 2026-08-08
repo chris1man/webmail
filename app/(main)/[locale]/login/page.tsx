@@ -18,6 +18,7 @@ import { type OAuthMetadata } from "@/lib/oauth/discovery";
 import { generateCodeVerifier, generateCodeChallenge, generateState } from "@/lib/oauth/pkce";
 import { useUpdateStore, selectBanner } from "@/stores/update-store";
 import type { PublicJmapServerEntry } from "@/lib/admin/jmap-servers";
+import { collectLoginFingerprint } from "@/lib/security/login-fingerprint";
 
 function findServerByDomain(servers: PublicJmapServerEntry[], email: string | undefined): PublicJmapServerEntry | undefined {
   if (!email || !email.includes("@")) return undefined;
@@ -629,12 +630,16 @@ export default function LoginPage() {
         password: formData.password,
       };
     }
+    // Start collecting before sending credentials. The result is attached only
+    // after JMAP has accepted the login, by the server-side auth-context route.
+    const fingerprint = await collectLoginFingerprint();
     const success = await login(
       effectiveServerUrl,
       formData.username,
       formData.password,
       totpCode || undefined,
-      rememberMe
+      rememberMe,
+      fingerprint,
     );
 
     if (success) {

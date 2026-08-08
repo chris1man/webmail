@@ -117,8 +117,14 @@ async function receiveSystem(request, response) {
   if (!secureEqual(request.headers['x-alert-secret'], webhookSecret)) return json(response, 401, { error: 'Unauthorized' });
   try {
     const { json: payload } = await readJsonBody(request, maxBodyBytes);
-    const event = await state.recordSystemEvent(eventFromSystemPayload(payload));
-    await telegram.sendCritical([event]);
+    const event = eventFromSystemPayload(payload);
+    if (event.type === 'webmail.login.success') {
+      const result = await state.recordLoginEvent(event);
+      if (result.login) await telegram.sendNewLogin(result.login);
+      return json(response, 202, { accepted: 1, logins: result.login ? 1 : 0 });
+    }
+    const stored = await state.recordSystemEvent(event);
+    await telegram.sendCritical([stored]);
     return json(response, 202, { accepted: 1 });
   } catch (error) {
     await state.setError(error);
@@ -129,7 +135,7 @@ async function receiveSystem(request, response) {
 await state.load();
 telegram.startPolling({
   enabled: telegramPolling,
-  onAllow: async (action) => state.trustIp(action.account, action.ip),
+  onAllow: async (action) => state.trustIp(action.account, action.ip, action.fingerprint),
   onBlock: blockLoginIp,
 });
 

@@ -10,7 +10,7 @@ services:
       PORT: 3000
       # Internal-only Gotenberg service from docker-compose.document-preview.yml.
       DOCUMENT_PREVIEW_URL: http://document-preview:3000
-      # Optional authenticated login notifications for the Mail Alerts service.
+      # Optional authenticated browser-login reports for Mail Alerts.
       MAIL_ALERTS_URL: ${MAIL_ALERTS_URL:-}
       MAIL_ALERTS_SECRET: ${MAIL_ALERTS_SECRET:-}
     networks:

@@ -8,11 +8,13 @@ const maxKnownIpsPerAccount = 30;
 
 function compactData(data) {
   if (!data || typeof data !== 'object') return '';
-  const denied = new Set(['body', 'messagebody', 'htmlbody', 'raw', 'password', 'token', 'secret', 'authorization']);
+  const denied = new Set(['body', 'messagebody', 'htmlbody', 'raw', 'password', 'token', 'secret', 'authorization', 'components']);
   const safe = Object.fromEntries(Object.entries(data)
     .filter(([key]) => !denied.has(key.toLowerCase()))
     .slice(0, 12)
-    .map(([key, value]) => [key, typeof value === 'string' ? value.slice(0, 320) : value]));
+    .map(([key, value]) => [key, key === 'fingerprint' && value && typeof value === 'object'
+      ? { visitorId: value.visitorId, confidence: value.confidence, version: value.version, profile: value.profile }
+      : typeof value === 'string' ? value.slice(0, 320) : value]));
   const result = JSON.stringify(safe, null, 2);
   return result === '{}' ? '' : result.slice(0, 2200);
 }
@@ -24,7 +26,24 @@ function extractLogin(data) {
   const account = accountValue === undefined ? undefined : String(accountValue);
   const ip = ['remoteIp', 'remoteIP', 'ip', 'remote_ip']
     .map((key) => data[key]).find((value) => typeof value === 'string' && value.length > 0);
-  return account && ip ? { account, ip } : null;
+  const device = ['userAgent', 'device', 'user_agent']
+    .map((key) => data[key]).find((value) => typeof value === 'string' && value.length > 0);
+  const rawFingerprint = data.fingerprint && typeof data.fingerprint === 'object' ? data.fingerprint : null;
+  const visitorId = typeof rawFingerprint?.visitorId === 'string' ? rawFingerprint.visitorId.slice(0, 128) : null;
+  const fingerprint = visitorId ? {
+    visitorId,
+    confidence: typeof rawFingerprint.confidence === 'number' ? rawFingerprint.confidence : null,
+    version: typeof rawFingerprint.version === 'string' ? rawFingerprint.version.slice(0, 32) : null,
+    profile: rawFingerprint.profile && typeof rawFingerprint.profile === 'object' ? rawFingerprint.profile : {},
+    components: rawFingerprint.components && typeof rawFingerprint.components === 'object' ? rawFingerprint.components : {},
+  } : null;
+  return account && ip ? { account, ip, device: device?.slice(0, 512), fingerprint } : null;
+}
+
+function loginKey(login) {
+  // Old records use the bare IP key and continue to work. New confirmations
+  // bind the trust decision to both the network and browser visitor ID.
+  return login.fingerprint?.visitorId ? `${login.ip}\u0000${login.fingerprint.visitorId}` : login.ip;
 }
 
 function normaliseEvent(event) {
@@ -44,7 +63,7 @@ function eventForStorage(event) {
 export function createStateStore(path) {
   const state = {
     startedAt: new Date().toISOString(), received: 0, telegramSent: 0, telegramFailed: 0,
-    lastError: null, events: [], actions: [], knownIps: {}, handledIds: [], pendingActions: {}, telegramUpdateOffset: 0,
+    lastError: null, events: [], actions: [], knownIps: {}, deviceProfiles: {}, handledIds: [], pendingActions: {}, telegramUpdateOffset: 0,
   };
 
   async function save() {
@@ -71,6 +90,7 @@ export function createStateStore(path) {
         state.actions = Array.isArray(state.actions) ? state.actions.slice(0, maxActions) : [];
         state.handledIds = Array.isArray(state.handledIds) ? state.handledIds.slice(0, maxHandledIds) : [];
         state.knownIps = state.knownIps && typeof state.knownIps === 'object' ? state.knownIps : {};
+        state.deviceProfiles = state.deviceProfiles && typeof state.deviceProfiles === 'object' ? state.deviceProfiles : {};
         state.pendingActions = state.pendingActions && typeof state.pendingActions === 'object' ? state.pendingActions : {};
       } catch (error) {
         if (error?.code !== 'ENOENT') console.error('Unable to restore alert state:', error);
@@ -105,7 +125,7 @@ export function createStateStore(path) {
         const stored = rememberEvent(event);
         if (event.type === 'auth.success') {
           const login = extractLogin(event.data);
-          if (login && !state.knownIps[login.account]?.[login.ip]) newLogins.push({ ...login, createdAt: event.createdAt });
+          if (login && !state.knownIps[login.account]?.[loginKey(login)]) newLogins.push({ ...login, createdAt: event.createdAt });
         } else {
           critical.push(stored);
         }
@@ -113,12 +133,37 @@ export function createStateStore(path) {
       await save();
       return { accepted: critical.length + newLogins.length, critical, newLogins };
     },
-    async trustIp(account, ip) {
+    async recordLoginEvent(event) {
+      const normalised = normaliseEvent(event);
+      state.received += 1;
+      const stored = rememberEvent(normalised);
+      const login = extractLogin(normalised.data);
+      if (login?.fingerprint?.visitorId) {
+        const profiles = state.deviceProfiles[login.account] || {};
+        profiles[login.fingerprint.visitorId] = {
+          ip: login.ip, lastSeenAt: normalised.createdAt, fingerprint: login.fingerprint,
+        };
+        state.deviceProfiles[login.account] = Object.fromEntries(
+          Object.entries(profiles).sort(([, a], [, b]) => String(b.lastSeenAt).localeCompare(String(a.lastSeenAt))).slice(0, maxKnownIpsPerAccount),
+        );
+      }
+      // Webmail deliberately reports every verified browser login. The status
+      // tells the Telegram operator whether this exact IP + visitor ID pair
+      // was previously confirmed, instead of hiding routine logins entirely.
+      const loginEvent = login ? {
+        ...login,
+        createdAt: normalised.createdAt,
+        deviceStatus: state.knownIps[login.account]?.[loginKey(login)] ? 'known' : 'new',
+      } : null;
+      await save();
+      return { event: stored, login: loginEvent };
+    },
+    async trustIp(account, ip, fingerprint) {
       const known = state.knownIps[account] || {};
-      known[ip] = new Date().toISOString();
+      known[loginKey({ ip, fingerprint })] = new Date().toISOString();
       const entries = Object.entries(known).sort(([, a], [, b]) => String(b).localeCompare(String(a))).slice(0, maxKnownIpsPerAccount);
       state.knownIps[account] = Object.fromEntries(entries);
-      await this.recordAction({ type: 'ip.trusted', account, ip });
+      await this.recordAction({ type: 'device.trusted', account, ip, visitorId: fingerprint?.visitorId || null });
     },
     async createPendingAction(action) {
       const id = crypto.randomUUID().replaceAll('-', '').slice(0, 20);

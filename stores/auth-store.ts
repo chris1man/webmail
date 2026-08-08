@@ -17,6 +17,7 @@ import { replaceWindowLocation, getPathPrefix, getLocaleFromPath, apiFetch } fro
 import { notifyParent } from '@/lib/iframe-bridge';
 import { snapshotAccount, restoreAccount, clearAllStores, evictAccount, evictAll } from '@/lib/account-state-manager';
 import type { Identity } from '@/lib/jmap/types';
+import type { LoginFingerprint } from '@/lib/security/login-fingerprint';
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -37,7 +38,7 @@ interface AuthState {
   activeAccountId: string | null;
   isDemoMode: boolean;
 
-  login: (serverUrl: string, username: string, password: string, totp?: string, rememberMe?: boolean) => Promise<boolean>;
+  login: (serverUrl: string, username: string, password: string, totp?: string, rememberMe?: boolean, fingerprint?: LoginFingerprint | null) => Promise<boolean>;
   loginWithOAuth: (serverUrl: string, code: string, codeVerifier: string, redirectUri: string, serverId?: string) => Promise<boolean>;
   loginWithServerSso: (code: string, state: string) => Promise<boolean>;
   loginDemo: () => Promise<boolean>;
@@ -122,12 +123,13 @@ async function syncStalwartAuthContext(
   username: string,
   authHeader: string,
   slot: number,
+  fingerprint?: LoginFingerprint | null,
 ): Promise<void> {
   try {
     const response = await apiFetch('/api/auth/stalwart-context', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serverUrl, username, authHeader, slot }),
+      body: JSON.stringify({ serverUrl, username, authHeader, slot, fingerprint }),
     });
 
     if (!response.ok) {
@@ -573,7 +575,7 @@ export const useAuthStore = create<AuthState>()(
       activeAccountId: null,
       isDemoMode: false,
 
-      login: async (serverUrl, username, password, totp, rememberMe) => {
+      login: async (serverUrl, username, password, totp, rememberMe, fingerprint) => {
         set({ isLoading: true, error: null, isRateLimited: false, rateLimitUntil: null });
 
         try {
@@ -678,7 +680,7 @@ export const useAuthStore = create<AuthState>()(
           const [rawIdentities] = await Promise.all([
             identitiesPromise,
             sessionWrite,
-            syncStalwartAuthContext(serverUrl, username, client.getAuthHeader(), cookieSlot),
+            syncStalwartAuthContext(serverUrl, username, client.getAuthHeader(), cookieSlot, fingerprint),
           ]);
 
           const { identities, primaryIdentity } = loadIdentities(rawIdentities, username);

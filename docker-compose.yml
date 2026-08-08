@@ -6,7 +6,7 @@ services:
     environment:
       - HOSTNAME=0.0.0.0 # Use "::" for IPv6
       - PORT=3000
-      # Optional: authenticated notifications about successful Bulwark logins.
+      # Authenticated browser-login reports sent over the private Docker network.
       - MAIL_ALERTS_URL=${MAIL_ALERTS_URL:-}
       - MAIL_ALERTS_SECRET=${MAIL_ALERTS_SECRET:-}
     env_file:
