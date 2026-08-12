@@ -29,6 +29,7 @@
     "hide_password": "Skryť heslo",
     "totp_toggle": "Mám kód 2FA",
     "remember_me": "Zapamätať si ma",
+    "shared_computer_session": "Nezapamätať moju reláciu. Zdieľaný počítač",
     "config_error": {
       "title": "Chyba konfigurácie",
       "fetch_failed": "Konfiguráciu aplikácie sa nepodarilo načítať. Skúste to neskôr.",

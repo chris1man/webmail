@@ -29,6 +29,7 @@
     "hide_password": "Slēpt paroli",
     "totp_toggle": "Man ir 2FA kods",
     "remember_me": "Atcerēties mani",
+    "shared_computer_session": "Neatcerēties manu sesiju. Koplietots dators",
     "config_error": {
       "title": "Konfigurācijas kļūda",
       "fetch_failed": "Neizdevās ielādēt lietotnes konfigurāciju. Mēģiniet vēlāk.",

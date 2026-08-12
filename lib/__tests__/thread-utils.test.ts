@@ -3,6 +3,7 @@ import {
   groupEmailsByThread,
   sortThreadGroups,
   getThreadParticipants,
+  splitSelfSentDuplicateCopies,
   mergeThreadEmails,
   getEmailColorTag,
   getThreadColorTag,
@@ -183,6 +184,48 @@ describe('getThreadParticipants', () => {
       makeEmail({ from: [{ name: '', email: 'charlie@example.com' }] }),
     ];
     expect(getThreadParticipants(emails)).toEqual(['charlie']);
+  });
+});
+
+describe('splitSelfSentDuplicateCopies', () => {
+  it('keeps both self-addressed copies visible but separates their UI threads', () => {
+    const sent = makeEmail({
+      id: 'sent-copy',
+      threadId: 'thread-self',
+      messageId: '<self-message@example.com>',
+      from: [{ email: 'me@example.com' }],
+      to: [{ email: 'me@example.com' }],
+    });
+    const inbox = makeEmail({
+      id: 'inbox-copy',
+      threadId: 'thread-self',
+      messageId: '<self-message@example.com>',
+      from: [{ email: 'me@example.com' }],
+      to: [{ email: 'me@example.com' }],
+    });
+
+    const result = splitSelfSentDuplicateCopies([sent, inbox], ['me@example.com']);
+    expect(result).toHaveLength(2);
+    expect(result.map((email) => email.threadId)).toEqual([
+      'thread-self:self-copy:sent-copy',
+      'thread-self:self-copy:inbox-copy',
+    ]);
+  });
+
+  it('does not split a normal conversation or a message with an external recipient', () => {
+    const first = makeEmail({ id: 'one', threadId: 'thread-1', messageId: '<shared@example.com>' });
+    const second = makeEmail({ id: 'two', threadId: 'thread-1', messageId: '<shared@example.com>' });
+    const external = makeEmail({
+      id: 'three',
+      threadId: 'thread-2',
+      messageId: '<external@example.com>',
+      from: [{ email: 'me@example.com' }],
+      to: [{ email: 'outside@example.com' }],
+    });
+    const otherExternal = makeEmail({ ...external, id: 'four' });
+
+    const result = splitSelfSentDuplicateCopies([first, second, external, otherExternal], ['me@example.com']);
+    expect(result.map((email) => email.threadId)).toEqual(['thread-1', 'thread-1', 'thread-2', 'thread-2']);
   });
 });
 

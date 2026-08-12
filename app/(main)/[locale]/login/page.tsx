@@ -163,7 +163,9 @@ export default function LoginPage() {
   const effectiveOauthIssuerUrl = selectedServer?.oauth?.issuerUrl || globalOauthIssuerUrl;
   const [totpCode, setTotpCode] = useState("");
   const [showTotpField, setShowTotpField] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  // Sessions are remembered by default. On a shared computer the user can
+  // explicitly opt into the old session-only behaviour instead.
+  const [isGuestComputer, setIsGuestComputer] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [shakeError, setShakeError] = useState(false);
@@ -638,7 +640,7 @@ export default function LoginPage() {
       formData.username,
       formData.password,
       totpCode || undefined,
-      rememberMe,
+      rememberMeEnabled && !isGuestComputer,
       fingerprint,
     );
 
@@ -1201,18 +1203,18 @@ export default function LoginPage() {
                     </div>
                   )}
 
-                  {/* Remember me */}
+                  {/* Shared computer: opt out of the default persistent session. */}
                   {rememberMeEnabled && (
                     <label className="flex items-center gap-2.5 cursor-pointer group select-none pt-1">
                       <span className="relative flex items-center justify-center">
                         <input
                           type="checkbox"
-                          checked={rememberMe}
-                          onChange={(e) => setRememberMe(e.target.checked)}
+                          checked={isGuestComputer}
+                          onChange={(e) => setIsGuestComputer(e.target.checked)}
                           className="peer sr-only"
                         />
                         <span className="flex items-center justify-center w-[18px] h-[18px] rounded-[5px] border border-border/80 bg-muted/40 peer-checked:bg-primary peer-checked:border-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background transition-all duration-200">
-                          {rememberMe && (
+                          {isGuestComputer && (
                             <svg className="w-3 h-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
                               <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
@@ -1220,7 +1222,7 @@ export default function LoginPage() {
                         </span>
                       </span>
                       <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-                        {t("remember_me")}
+                        {t("shared_computer_session")}
                       </span>
                     </label>
                   )}

@@ -84,6 +84,47 @@ export function sortThreadGroups(groups: ThreadGroup[]): ThreadGroup[] {
 }
 
 /**
+ * Mail sent to one of the account's own addresses is stored twice by the mail
+ * server: once in Sent and once as the delivered Inbox copy. Keep both copies
+ * visible, but give each one its own UI-only thread so the list does not turn
+ * a single self-addressed message into a confusing two-message conversation.
+ */
+export function splitSelfSentDuplicateCopies(
+  emails: Email[],
+  ownAddresses: Iterable<string>,
+): Email[] {
+  const own = new Set(Array.from(ownAddresses, (address) => address.trim().toLowerCase()).filter(Boolean));
+  if (own.size === 0) return emails;
+  const groups = new Map<string, Email[]>();
+
+  for (const email of emails) {
+    const messageId = email.messageId?.trim().replace(/^<|>$/g, '');
+    if (!messageId) continue;
+    const key = messageId.toLowerCase();
+    groups.set(key, [...(groups.get(key) ?? []), email]);
+  }
+
+  const splitIds = new Set<string>();
+  for (const copies of groups.values()) {
+    if (copies.length < 2 || !copies.every((email) => isSelfAddressed(email, own))) continue;
+    for (const copy of copies) splitIds.add(copy.id);
+  }
+
+  return splitIds.size > 0
+    ? emails.map((email) => splitIds.has(email.id) ? { ...email, threadId: `${email.threadId}:self-copy:${email.id}` } : email)
+    : emails;
+}
+
+function isSelfAddressed(email: Email, ownAddresses: Set<string>): boolean {
+  const sender = email.from?.[0]?.email?.trim().toLowerCase();
+  if (!sender || !ownAddresses.has(sender)) return false;
+  const recipients = [...(email.to ?? []), ...(email.cc ?? []), ...(email.bcc ?? [])]
+    .map((recipient) => recipient.email?.trim().toLowerCase())
+    .filter((address): address is string => Boolean(address));
+  return recipients.length > 0 && recipients.every((address) => ownAddresses.has(address));
+}
+
+/**
  * Extracts unique participant names from a list of emails.
  * Includes both senders and recipients, limited to avoid UI overflow.
  */

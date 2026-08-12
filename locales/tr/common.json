@@ -29,6 +29,7 @@
     "hide_password": "Şifreyi gizle",
     "totp_toggle": "2FA kodum var",
     "remember_me": "Beni hatırla",
+    "shared_computer_session": "Oturumumu hatırlama. Ortak bilgisayar",
     "config_error": {
       "title": "Yapılandırma Hatası",
       "fetch_failed": "Uygulama yapılandırması yüklenemiyor. Lütfen daha sonra tekrar deneyin.",

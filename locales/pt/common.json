@@ -29,6 +29,7 @@
     "hide_password": "Ocultar senha",
     "totp_toggle": "Tenho um código 2FA",
     "remember_me": "Lembrar-me",
+    "shared_computer_session": "Não lembrar minha sessão. Computador partilhado",
     "config_error": {
       "title": "Erro de Configuração",
       "fetch_failed": "Não foi possível carregar a configuração do aplicativo. Por favor, tente novamente mais tarde.",

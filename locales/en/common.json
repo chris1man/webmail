@@ -29,6 +29,7 @@
     "hide_password": "Hide password",
     "totp_toggle": "I have a 2FA code",
     "remember_me": "Remember me",
+    "shared_computer_session": "Don't remember my session. Shared computer",
     "config_error": {
       "title": "Configuration Error",
       "fetch_failed": "Unable to load application configuration. Please try again later.",

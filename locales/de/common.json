@@ -29,6 +29,7 @@
     "hide_password": "Passwort verbergen",
     "totp_toggle": "Ich habe einen 2FA-Code",
     "remember_me": "Angemeldet bleiben",
+    "shared_computer_session": "Sitzung nicht speichern. Gemeinsamer Computer",
     "config_error": {
       "title": "Konfigurationsfehler",
       "fetch_failed": "Die Anwendungskonfiguration kann nicht geladen werden. Bitte versuchen Sie es später erneut.",

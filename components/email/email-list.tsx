@@ -12,7 +12,8 @@ import { useEmailStore } from "@/stores/email-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUIStore } from "@/stores/ui-store";
-import { groupEmailsByThread, sortThreadGroups } from "@/lib/thread-utils";
+import { groupEmailsByThread, splitSelfSentDuplicateCopies, sortThreadGroups } from "@/lib/thread-utils";
+import { useIdentityStore } from "@/stores/identity-store";
 import { useContextMenu } from "@/hooks/use-context-menu";
 import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useTranslations } from "next-intl";
@@ -123,11 +124,17 @@ export function EmailList({
     ?? (isUnifiedView ? (unifiedRole ?? undefined) : undefined);
 
   const disableThreading = useSettingsStore((state) => state.disableThreading);
+  const identities = useIdentityStore((state) => state.identities);
+  const ownAddresses = useMemo(() => identities.map((identity) => identity.email), [identities]);
+  const visibleEmails = useMemo(
+    () => splitSelfSentDuplicateCopies(emails, ownAddresses),
+    [emails, ownAddresses],
+  );
 
   const threadGroups = useMemo(() => {
-    const groups = groupEmailsByThread(emails, disableThreading || isScheduledView, threadEmailCounts);
+    const groups = groupEmailsByThread(visibleEmails, disableThreading || isScheduledView, threadEmailCounts);
     return sortThreadGroups(groups);
-  }, [emails, disableThreading, isScheduledView, threadEmailCounts]);
+  }, [visibleEmails, disableThreading, isScheduledView, threadEmailCounts]);
 
   const { contextMenu, openContextMenu, closeContextMenu, menuRef } = useContextMenu<Email>();
   const { dialogProps: confirmDialogProps, confirm: confirmDialog } = useConfirmDialog();

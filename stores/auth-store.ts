@@ -667,14 +667,22 @@ export const useAuthStore = create<AuthState>()(
           // write and stalwart-context write are best-effort persistence; the
           // outer login still succeeds even if they log a warning. Errors are
           // caught locally so Promise.all doesn't reject on either.
-          const sessionWrite: Promise<unknown> = (rememberMe && !upgradedToOAuth)
-            ? apiFetch(`/api/auth/session?slot=${cookieSlot}`, {
+          const sessionWrite: Promise<unknown> = !upgradedToOAuth
+            ? (rememberMe
+              ? apiFetch(`/api/auth/session?slot=${cookieSlot}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ serverUrl, username, password, slot: cookieSlot }),
               }).then((res) => {
                 if (!res.ok) debug.error('Failed to store session: server returned', res.status);
               }).catch((err) => debug.error('Failed to store session:', err))
+              // A prior persistent login may have left a cookie in this slot.
+              // Remove it when "shared computer" is selected so a reload
+              // cannot silently restore this account after the browser closes.
+              : apiFetch(`/api/auth/session?slot=${cookieSlot}`, { method: 'DELETE' })
+                .then((res) => {
+                  if (!res.ok) debug.error('Failed to clear persistent session: server returned', res.status);
+                }).catch((err) => debug.error('Failed to clear persistent session:', err)))
             : Promise.resolve();
 
           const [rawIdentities] = await Promise.all([

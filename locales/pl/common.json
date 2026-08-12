@@ -29,6 +29,7 @@
     "hide_password": "Ukryj hasło",
     "totp_toggle": "Mam kod 2FA",
     "remember_me": "Zapamiętaj mnie",
+    "shared_computer_session": "Nie zapamiętuj mojej sesji. Wspólny komputer",
     "config_error": {
       "title": "Błąd konfiguracji",
       "fetch_failed": "Nie można załadować konfiguracji aplikacji. Spróbuj ponownie później.",
