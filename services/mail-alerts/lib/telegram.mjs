@@ -63,9 +63,18 @@ export function createTelegramClient({ token, chatId, state, apiBase }) {
   }
 
   async function sendNewLogin(login) {
+    if (login.deviceStatus === 'known') {
+      return send([
+        '🔐 Вход с известного устройства',
+        `Пользователь: ${login.account}`,
+        `IP: ${login.ip}`,
+        `Время: ${login.createdAt}`,
+      ].join('\n'), { disable_notification: true });
+    }
+
     const actionId = await state.createPendingAction({ type: 'login', ...login });
     const text = [
-      login.deviceStatus === 'known' ? '🔐 Вход с известного устройства' : '🔐 Новый вход в почту',
+      '🔐 Новый вход в почту',
       `Пользователь: ${login.account}`,
       `IP: ${login.ip}`,
       ...formatProfile(login),
