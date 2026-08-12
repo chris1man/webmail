@@ -148,6 +148,10 @@ interface EmailComposerProps {
     requestReadReceipt?: boolean;
   }) => void | Promise<void>;
   onScheduledSendCreated?: () => void | Promise<void>;
+  /** Called after a failed send has been safely retained as a draft. */
+  onSendFailed?: (data: { message: string; draftId: string | null }) => void | Promise<void>;
+  /** Called after the server confirmed saving a draft. */
+  onDraftSaved?: (draftId: string) => void | Promise<void>;
   onClose?: () => void;
   /**
    * When provided, the composer assigns its close handler to `current`. The
@@ -260,6 +264,8 @@ function getDefaultScheduleValue(): string {
 export function EmailComposer({
   onSend,
   onScheduledSendCreated,
+  onSendFailed,
+  onDraftSaved,
   onClose,
   requestCloseRef,
   onDiscardDraft,
@@ -281,7 +287,9 @@ export function EmailComposer({
   const autoSelectReplyIdentity = useSettingsStore((state) => state.autoSelectReplyIdentity);
   const attachmentReminderEnabled = useSettingsStore((state) => state.attachmentReminderEnabled);
   const attachmentReminderKeywords = useSettingsStore((state) => state.attachmentReminderKeywords);
-  const sendDelaySeconds = useSettingsStore((state) => state.sendDelaySeconds);
+  // Every ordinary send is held briefly to make Undo Send reliable. Explicit
+  // schedule-send dates still take precedence in resolveDelayedUntil().
+  const sendDelaySeconds = 15;
   const signaturePosition = useSettingsStore((state) => state.signaturePosition);
   const signatureSeparatorEnabled = useSettingsStore((state) => state.signatureSeparatorEnabled);
   const requestReadReceiptDefault = useSettingsStore((state) => state.requestReadReceiptDefault);
@@ -870,6 +878,20 @@ export function EmailComposer({
   const addTrustedSender = useSettingsStore((s) => s.addTrustedSender);
   const trustedSendersAddressBook = useSettingsStore((s) => s.trustedSendersAddressBook);
   const addTemplate = useTemplateStore((s) => s.addTemplate);
+
+  const ownRecipientSuggestions = useMemo<SuggestionItem[]>(() => {
+    const orderedIdentities = currentIdentity
+      ? [currentIdentity, ...identities.filter((identity) => identity.id !== currentIdentity.id)]
+      : identities;
+    const seen = new Set<string>();
+    return orderedIdentities.flatMap((identity) => {
+      const email = identity.email?.trim();
+      const key = email?.toLowerCase();
+      if (!email || !key || seen.has(key)) return [];
+      seen.add(key);
+      return [{ name: identity.name || email, email }];
+    });
+  }, [currentIdentity, identities]);
   // Sign/encrypt is provided by crypto plugins (S/MIME, PGP) via the
   // composer-toolbar slot + the onComposeSend hook — the host stays
   // crypto-agnostic.
@@ -1045,8 +1067,20 @@ export function EmailComposer({
 
     autocompleteTimeoutRef.current = setTimeout(async () => {
       const localResults = getAutocomplete(query);
+      // Natural ways of saying "myself" should put the active account first.
+      // Prefix matching makes the suggestion appear while the user types
+      // "себе", "лично", "я", or English equivalents.
+      const selfAliases = ['я', 'себе', 'себя', 'себ', 'лично', 'лич', 'мне', 'сам', 'сама', 'me', 'myself', 'self'];
+      const wantsSelf = selfAliases.some((alias) => alias.startsWith(query.toLowerCase()) || query.toLowerCase().startsWith(alias));
+      const seen = new Set<string>();
+      const combined = [...(wantsSelf ? ownRecipientSuggestions : []), ...localResults].filter((recipient) => {
+        const key = recipient.email.toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       // Let plugins contribute extra suggestions (Slack handles, GitHub, CRM, …).
-      const initial: RecipientSuggestion[] = localResults.map(r => ({ name: r.name, email: r.email, group: r.group }));
+      const initial: RecipientSuggestion[] = combined.map(r => ({ name: r.name, email: r.email, group: r.group }));
       const merged = await contactHooks.onProvideRecipientSuggestions.transform(initial, { query });
       setAutocompleteResults(merged.map(s => ({ name: s.name, email: s.email, group: s.group })));
       // Keep the dropdown open even without local hits when a server search is
@@ -1054,7 +1088,7 @@ export function EmailComposer({
       setActiveAutoField(merged.length > 0 || canSearchServer ? field : null);
       setAutoSelectedIndex(-1);
     }, 200);
-  }, [getAutocomplete, canSearchServer]);
+  }, [getAutocomplete, canSearchServer, ownRecipientSuggestions]);
 
   // On-demand: search the Sent folder server-side for recipients matching the
   // current query and merge fresh hits into the open dropdown (deduped by email).
@@ -1454,7 +1488,8 @@ export function EmailComposer({
     const ccAddresses = expandRecipients(withInput(cc, ccInput)).map(r => formatRecipient(r.name, r.email));
     const bccAddresses = expandRecipients(withInput(bcc, bccInput)).map(r => formatRecipient(r.name, r.email));
 
-    if (!toAddresses.length && !subject && !(plainTextMode ? body.trim() : htmlToPlainText(body).trim())) {
+    const hasDraftAttachment = attachments.some((attachment) => attachment.file || attachment.blobId);
+    if (!toAddresses.length && !subject && !(plainTextMode ? body.trim() : htmlToPlainText(body).trim()) && !hasDraftAttachment) {
       return null;
     }
 
@@ -1652,7 +1687,6 @@ export function EmailComposer({
 
   const resolveDelayedUntil = async (requestedDelayedUntil?: string): Promise<string | undefined> => {
     if (requestedDelayedUntil) return requestedDelayedUntil;
-    if (sendDelaySeconds === 0) return undefined;
     if (composerClient?.hasDelayedSend()) {
       return new Date(Date.now() + sendDelaySeconds * 1000).toISOString();
     }
@@ -2036,8 +2070,28 @@ export function EmailComposer({
     } catch (err) {
       debug.error('Failed to send email:', err);
       const message = err instanceof Error && err.message ? err.message : t('send_failed');
+      // A submission error must never strand the message only in the editor.
+      // Persist it first so the error dialog can safely offer reopening Drafts.
+      let failedDraftId = finalDraftId;
+      if (!failedDraftId) {
+        try {
+          failedDraftId = await saveDraft();
+        } catch (saveError) {
+          debug.error('Failed to preserve draft after send error:', saveError);
+        }
+      }
+      if (failedDraftId) {
+        try { await onDraftSaved?.(failedDraftId); } catch { /* list refresh is best-effort */ }
+      }
       setSendError(message);
-      toast.error(message);
+      if (onSendFailed) {
+        sendCancelledRef.current = true;
+        explicitCloseRef.current = true;
+        stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
+        await onSendFailed({ message, draftId: failedDraftId });
+      } else {
+        toast.error(message);
+      }
     } finally {
       isSendingRef.current = false;
       setIsSending(false);
@@ -2093,12 +2147,22 @@ export function EmailComposer({
 
   const handleSaveDraftAndClose = async () => {
     sendCancelledRef.current = true;
-    explicitCloseRef.current = true;
-    setShowCloseDialog(false);
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-    await saveDraft();
+    const savedDraftId = await saveDraft();
+    if (!savedDraftId) {
+      sendCancelledRef.current = false;
+      toast.error(t('save_failed'));
+      return;
+    }
+    try {
+      await onDraftSaved?.(savedDraftId);
+    } catch {
+      // The draft is already stored; a UI refresh failure must not re-open it.
+    }
+    explicitCloseRef.current = true;
+    setShowCloseDialog(false);
     stateRef.current = { to: '', cc: '', bcc: '', subject: '', body: '', showCc: false, showBcc: false, selectedIdentityId: null, subAddressTag: '', draftId: null, fromOverrideEnabled: false, fromOverrideEmail: '', fromOverrideName: '' };
     onClose?.();
   };

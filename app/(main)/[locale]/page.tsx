@@ -116,14 +116,15 @@ export default function Home() {
   const [pendingMailtoAccountChoice, setPendingMailtoAccountChoice] = useState<ParsedMailto | null>(null);
   const [isProtocolAccountSwitching, setIsProtocolAccountSwitching] = useState(false);
   const markAsReadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastUndoToastSubmissionRef = useRef<string | null>(null);
+  const [undoSendDetails, setUndoSendDetails] = useState<{ submissionId: string; recipients: string[]; subject: string; attachmentCount: number } | null>(null);
+  const [sendFailure, setSendFailure] = useState<{ message: string; draftId: string | null } | null>(null);
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0);
   const initialMailLoadClientRef = useRef<object | null>(null);
   const { isAuthenticated, client, logout, checkAuth, switchAccount, activeAccountId, isLoading: authLoading, connectionLost, isRateLimited, rateLimitUntil } = useAuthStore();
   const { identities } = useIdentityStore();
   const multiAccountIdentities = useProMultiAccountIdentities();
   useIdentitySync();
   const trustedSendersAddressBook = useSettingsStore((state) => state.trustedSendersAddressBook);
-  const sendDelaySeconds = useSettingsStore((state) => state.sendDelaySeconds);
   const { loadTrustedSendersBook, trustedSendersLoaded, loadRecentRecipients, loadPopularIncomingSenders } = useContactStore();
 
   const promptForRescheduleDelayedUntil = useCallback((): string | null => {
@@ -754,6 +755,17 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [clearPendingUndoSend, pendingUndoSend]);
 
+  useEffect(() => {
+    if (!pendingUndoSend) {
+      setUndoSecondsLeft(0);
+      return;
+    }
+    const update = () => setUndoSecondsLeft(Math.max(0, Math.ceil((new Date(pendingUndoSend.sendAt).getTime() - Date.now()) / 1000)));
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [pendingUndoSend]);
+
   // Update page title based on context
   useEffect(() => {
     let title = appName;
@@ -1225,7 +1237,7 @@ export default function Home() {
     delayedUntil?: string;
     requestReadReceipt?: boolean;
   }) => {
-    if (!client) return;
+    if (!client) throw new Error('Нет подключения к почтовому серверу');
 
     try {
       const effectiveMode = pendingDraft?.mode ?? composerMode;
@@ -1242,6 +1254,15 @@ export default function Home() {
         toastInstance.warning(t('email_composer.send_filing_warning'));
       }
       if (result.scheduled) {
+        const pending = useEmailStore.getState().pendingUndoSend;
+        if (pending) {
+          setUndoSendDetails({
+            submissionId: pending.submissionId,
+            recipients: [...data.to, ...data.cc, ...data.bcc],
+            subject: data.subject.trim(),
+            attachmentCount: data.attachments?.filter((attachment) => attachment.disposition !== 'inline').length ?? 0,
+          });
+        }
         await refreshScheduledMetadata(client);
         if (isScheduledView) await fetchScheduledEmails(client);
         return;
@@ -1296,6 +1317,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Failed to send email:", error);
+      throw error;
     }
   };
 
@@ -1455,65 +1477,46 @@ export default function Home() {
     if (isMobile) setActiveView('viewer');
   };
 
-  useEffect(() => {
-    if (!pendingUndoSend || !client) return;
-    if (lastUndoToastSubmissionRef.current === pendingUndoSend.submissionId) return;
+  const handleUndoSend = async () => {
+    if (!client || !pendingUndoSend) return;
+    try {
+      const restored = await cancelUndoSend(client, pendingUndoSend);
+      setUndoSendDetails(null);
+      if (restored && !pendingUndoSend.isSmime) await handleEditDraft(restored);
+      if (isScheduledView) await fetchScheduledEmails(client);
+    } catch (error) {
+      console.error('Failed to undo scheduled send:', error);
+      toast.error(error instanceof Error ? error.message : 'Не удалось отменить отправку');
+    }
+  };
 
-    lastUndoToastSubmissionRef.current = pendingUndoSend.submissionId;
-    const pending = pendingUndoSend;
-    const undoDurationMs = Math.max(sendDelaySeconds, 8) * 1000;
-
-    toast.success(t('email_viewer.scheduled_send_created'), {
-      duration: undoDurationMs,
-      secondaryAction: (pending.emailId && pending.identityId)
-        ? {
-            label: t('email_viewer.send_now'),
-            onClick: () => {
-              void (async () => {
-                try {
-                  await client.rescheduleEmailSubmission(
-                    pending.submissionId,
-                    pending.emailId!,
-                    pending.identityId!,
-                    new Date(Date.now() + 1000).toISOString(),
-                  );
-                  clearPendingUndoSend();
-                  if (isScheduledView) await fetchScheduledEmails(client);
-                } catch (error) {
-                  console.error('Failed to send now:', error);
-                }
-              })();
-            },
-          }
-        : undefined,
-      action: {
-        label: t('email_viewer.undo_send'),
-        onClick: () => {
-          void (async () => {
-            try {
-              const restored = await cancelUndoSend(client, pending);
-              if (restored && !pending.isSmime) {
-                await handleEditDraft(restored);
-              }
-              if (isScheduledView) await fetchScheduledEmails(client);
-            } catch (error) {
-              console.error('Failed to undo scheduled send:', error);
-            }
-          })();
-        },
-      },
-    });
-
-    const timer = setTimeout(() => {
-      const current = useEmailStore.getState().pendingUndoSend;
-      if (current?.submissionId === pending.submissionId) {
-        clearPendingUndoSend();
+  const handleSendImmediately = async () => {
+    if (!pendingUndoSend) return;
+    try {
+      if (client && pendingUndoSend.emailId && pendingUndoSend.identityId) {
+        await client.rescheduleEmailSubmission(
+          pendingUndoSend.submissionId,
+          pendingUndoSend.emailId,
+          pendingUndoSend.identityId,
+          new Date(Date.now() + 1000).toISOString(),
+        );
       }
-    }, undoDurationMs);
+      setUndoSendDetails(null);
+      clearPendingUndoSend();
+      if (client && isScheduledView) await fetchScheduledEmails(client);
+    } catch (error) {
+      console.error('Failed to send scheduled email immediately:', error);
+      toast.error(error instanceof Error ? error.message : 'Не удалось отправить письмо');
+    }
+  };
 
-    return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cancelUndoSend, clearPendingUndoSend, client, fetchScheduledEmails, isScheduledView, pendingUndoSend?.submissionId, sendDelaySeconds, t]);
+  const handleOpenFailedDraft = async () => {
+    const draftId = sendFailure?.draftId;
+    setSendFailure(null);
+    if (!client || !draftId) return;
+    const draft = await client.getEmail(draftId);
+    if (draft) await handleEditDraft(draft);
+  };
 
   const handleReplyAll = async () => {
     if (selectedEmail) {
@@ -2456,7 +2459,7 @@ export default function Home() {
       : undefined;
 
     const originalEmailId = selectedEmail.id;
-    const sendDelaySeconds = useSettingsStore.getState().sendDelaySeconds;
+    const sendDelaySeconds = 15;
     let delayedUntil: string | undefined;
     if (sendDelaySeconds > 0) {
       if (!client.hasDelayedSend()) {
@@ -3371,6 +3374,17 @@ export default function Home() {
                     setShowComposer(false);
                     setPendingDraft(null);
                   }}
+                  onSendFailed={({ message, draftId }) => {
+                    setShowComposer(false);
+                    setPendingDraft(null);
+                    setSendFailure({ message, draftId });
+                  }}
+                  onDraftSaved={async () => {
+                    const selected = mailboxes.find((mailbox) => mailbox.id === selectedMailbox);
+                    if (client && selected?.role === 'drafts') {
+                      await refreshCurrentMailbox(client);
+                    }
+                  }}
                   onClose={() => {
                     setShowComposer(false);
                     setComposerMode('compose');
@@ -3552,6 +3566,53 @@ export default function Home() {
             onDownload={handlePreviewAttachmentDownload}
             getFileContent={getPreviewAttachmentContent}
           />
+        )}
+
+        {pendingUndoSend && undoSendDetails?.submissionId === pendingUndoSend.submissionId && (
+          <aside className="fixed bottom-5 right-5 z-[70] w-[min(26rem,calc(100vw-2.5rem))] rounded-xl border border-border bg-background p-4 shadow-2xl" aria-live="polite">
+            <button
+              type="button"
+              onClick={() => void handleSendImmediately()}
+              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Отправить письмо"
+              title="Отправить письмо"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <p className="pr-7 text-sm font-semibold">Письмо будет отправлено</p>
+            <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+              <p className="truncate" title={undoSendDetails.recipients.join(', ')}>Кому: {undoSendDetails.recipients.join(', ') || 'без получателей'}</p>
+              <p className="truncate" title={undoSendDetails.subject}>Тема: {undoSendDetails.subject || 'без темы'}</p>
+              <p>Вложений: {undoSendDetails.attachmentCount}</p>
+            </div>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <span className="text-sm font-medium tabular-nums">{undoSecondsLeft} сек.</span>
+              <Button size="sm" variant="outline" onClick={() => void handleUndoSend()}>
+                Отменить отправку
+              </Button>
+            </div>
+          </aside>
+        )}
+
+        {sendFailure && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" role="alertdialog" aria-modal="true" aria-labelledby="send-error-title">
+            <div className="w-full max-w-md rounded-xl bg-background p-6 shadow-2xl">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-destructive/10 p-2 text-destructive"><AlertTriangle className="h-5 w-5" /></div>
+                <div>
+                  <h2 id="send-error-title" className="font-semibold">Ошибка отправки</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">{sendFailure.message}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {sendFailure.draftId ? 'Письмо сохранено в черновиках.' : 'Не удалось сохранить письмо в черновики.'}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setSendFailure(null)}>Закрыть</Button>
+                <Button onClick={() => void handleOpenFailedDraft()} disabled={!sendFailure.draftId}>Открыть письмо</Button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Screen reader live region for dynamic status announcements */}

@@ -64,7 +64,7 @@ export type MailLayout = 'split' | 'focus' | 'horizontal';
  */
 export type MessageSpacing = 'auto' | 'always' | 'edge';
 export type CalendarHoverPreview = 'off' | 'instant' | 'delay-500ms' | 'delay-1s' | 'delay-2s';
-export type SendDelaySeconds = 0 | 10 | 30 | 60;
+export type SendDelaySeconds = 15;
 export type ProtocolOpenMode = 'active-session' | 'new-tab';
 
 /**
@@ -404,7 +404,7 @@ const DEFAULT_SETTINGS = {
   plainTextMode: false,
   rtlEditingSupport: false,
   subAddressDelimiter: DEFAULT_SUB_ADDRESS_DELIMITER,
-  sendDelaySeconds: 0 as SendDelaySeconds,
+  sendDelaySeconds: 15 as SendDelaySeconds,
   signaturePosition: 'below_quote' as SignaturePosition,
   signatureSeparatorEnabled: true,
   requestReadReceiptDefault: false,
@@ -699,8 +699,8 @@ export const useSettingsStore = create<SettingsState>()(
               if (key === 'subAddressDelimiter' && !isValidSubAddressDelimiter(settings[key])) {
                 return;
               }
-              if (key === 'sendDelaySeconds' && ![0, 10, 30, 60].includes(settings[key])) {
-                set({ sendDelaySeconds: 0 });
+              if (key === 'sendDelaySeconds' && settings[key] !== 15) {
+                set({ sendDelaySeconds: 15 });
                 return;
               }
               // Ignore a legacy global allMailFolderIds (string[] | null) or any
@@ -941,8 +941,8 @@ export function migrateSettings(persisted: unknown, version: number): SettingsSt
           state.density = state.listDensity;
           delete state.listDensity;
         }
-        if (![0, 10, 30, 60].includes(state.sendDelaySeconds as number)) {
-          state.sendDelaySeconds = 0;
+        if (state.sendDelaySeconds !== 15) {
+          state.sendDelaySeconds = 15;
         }
         if (version < 3 && typeof state.protocolOpenMode !== 'string' && typeof state.protocolMailtoOpenMode === 'string') {
           state.protocolOpenMode = state.protocolMailtoOpenMode;
