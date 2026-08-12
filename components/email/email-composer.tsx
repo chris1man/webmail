@@ -5,7 +5,7 @@ import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, Paperclip, Send, Save, Check, Loader2, AlertCircle, FileText, BookmarkPlus, CalendarClock, ChevronDown, MailCheck, Search, Users } from "lucide-react";
+import { X, Paperclip, Send, Save, Check, Loader2, AlertCircle, FileText, BookmarkPlus, CalendarClock, ChevronDown, MailCheck, Search, Users, Eye } from "lucide-react";
 import { cn, formatFileSize, formatDateTime, generateUUID } from "@/lib/utils";
 import { debug } from "@/lib/debug";
 import { toast } from "@/stores/toast-store";
@@ -14,7 +14,7 @@ import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from "@/components
 import { sanitizeSignatureHtml, sanitizeSignatureHtmlForDisplay, sanitizeEmailHtml, escapeHtml } from "@/lib/email-sanitization";
 import { buildReplySubject, buildForwardSubject } from "@/lib/subject-prefix";
 import { getOutgoingSubject } from "@/lib/outgoing-subject";
-import { isFilePreviewable } from "@/lib/file-preview";
+import { getFilePreviewKind, isFilePreviewable } from "@/lib/file-preview";
 import { isEditableEventTarget } from "@/lib/keyboard";
 import { buildQuotedHtmlBlock, serializeEditorContent } from "@/components/email/quoted-html";
 import { buildSignatureBlock } from "@/components/email/signature-block";
@@ -28,6 +28,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { PluginSlot } from "@/components/plugins/plugin-slot";
 import { Avatar } from "@/components/ui/avatar";
 import { FilePreviewModal } from "@/components/files/file-preview-modal";
+import { DocumentThumbnail } from "@/components/files/document-thumbnail";
 import { useContactStore, getContactDisplayName, getContactPrimaryEmail } from "@/stores/contact-store";
 import { useTemplateStore } from "@/stores/template-store";
 import { SubAddressHelper } from "@/components/identity/sub-address-helper";
@@ -208,6 +209,34 @@ type ComposerAttachment = {
   abortController?: AbortController;
 };
 
+function getAttachmentTypeLabel(name: string, type: string): string {
+  const extension = name.split('.').pop()?.trim().toLowerCase();
+  if (extension) return extension.toUpperCase();
+  if (type === 'application/pdf') return 'PDF';
+  if (type.startsWith('image/')) return 'IMG';
+  if (type.startsWith('audio/')) return 'AUDIO';
+  if (type.startsWith('video/')) return 'VIDEO';
+  return 'FILE';
+}
+
+function AttachmentTypeBadge({ name, type }: Pick<ComposerAttachment, 'name' | 'type'>) {
+  const label = getAttachmentTypeLabel(name, type);
+  const tone = label === 'PDF'
+    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+    : ['DOC', 'DOCX', 'ODT', 'RTF'].includes(label)
+      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+      : ['XLS', 'XLSX', 'CSV', 'ODS'].includes(label)
+        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+        : ['PPT', 'PPTX', 'ODP'].includes(label)
+          ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400'
+          : 'bg-muted-foreground/10 text-muted-foreground';
+  return (
+    <span className={cn('inline-flex min-w-9 justify-center rounded px-1.5 py-1 text-[10px] font-bold leading-none', tone)} aria-label={label}>
+      {label}
+    </span>
+  );
+}
+
 type SignatureIdentityLike = {
   htmlSignature?: string;
   textSignature?: string;
@@ -271,6 +300,7 @@ export function EmailComposer({
 }: EmailComposerProps) {
   const t = useTranslations('email_composer');
   const tCommon = useTranslations('common');
+  const tFiles = useTranslations('files');
   const tQuote = useTranslations('quote_header');
   const timeFormat = useSettingsStore((state) => state.timeFormat);
   const plainTextMode = useSettingsStore((state) => state.plainTextMode);
@@ -1414,6 +1444,17 @@ export function EmailComposer({
     throw new Error('No attachment content available');
   }, [previewAttachment, composerClient]);
 
+  const getAttachmentContent = useCallback(async (attachment: ComposerAttachment) => {
+    if (attachment.file) {
+      return { blob: attachment.file, contentType: attachment.type || attachment.file.type || 'application/octet-stream' };
+    }
+    if (attachment.blobId && composerClient) {
+      const blob = await composerClient.fetchBlob(attachment.blobId, attachment.name, attachment.type);
+      return { blob, contentType: attachment.type || blob.type || 'application/octet-stream' };
+    }
+    throw new Error('No attachment content available');
+  }, [composerClient]);
+
   const handlePreviewAttachmentDownload = useCallback(async () => {
     if (!previewAttachment) return;
     if (previewAttachment.file) {
@@ -2548,6 +2589,83 @@ export function EmailComposer({
               aria-invalid={validationErrors.subject || undefined}
             />
           </div>
+
+          {/* Keep attached documents with the addressing fields, before the
+              message body. PDF and Office cards open the page preview. */}
+          {attachments.length > 0 && (
+            <div className="border-t border-border/50 px-4 py-2.5">
+              <div className="flex flex-wrap gap-2">
+                {(showAllAttachments ? attachments : attachments.slice(0, 3)).map((att, index) => {
+                  const canPreview = !att.uploading && !att.error
+                    && (!!att.file || !!att.blobId)
+                    && isFilePreviewable(att.name, att.type);
+                  const documentPreview = canPreview && ['pdf', 'office'].includes(getFilePreviewKind(att.name, att.type));
+                  return (
+                    <div
+                      key={index}
+                      className={cn(
+                        'relative flex min-w-[220px] max-w-full items-center gap-2 rounded-md border px-2.5 py-2 text-sm',
+                        documentPreview && 'w-44 min-w-44 flex-col items-stretch overflow-hidden p-0',
+                        att.error ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400' : 'border-border bg-muted/40 text-foreground',
+                      )}
+                    >
+                      {att.uploading && (
+                        <div className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-b-md">
+                          <div className="h-full w-2/5 animate-[indeterminate_1.5s_ease-in-out_infinite] bg-primary/60" />
+                        </div>
+                      )}
+                      {documentPreview && (
+                        <button type="button" onClick={() => setPreviewAttachment(att)} className="flex h-24 w-full items-center justify-center overflow-hidden bg-white" aria-label={`${tFiles('preview')}: ${att.name}`}>
+                          <DocumentThumbnail
+                            name={att.name}
+                            type={att.type}
+                            getFileContent={() => getAttachmentContent(att)}
+                            className="flex h-full w-full items-center justify-center"
+                          />
+                        </button>
+                      )}
+                      <div className={cn('flex min-w-0 flex-1 items-center gap-2', documentPreview && 'w-full border-t border-border/50 px-2.5 py-2')}>
+                      {att.uploading ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : att.error ? <AlertCircle className="h-4 w-4 shrink-0" /> : <AttachmentTypeBadge name={att.name} type={att.type} />}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium" title={att.name}>{att.name}</p>
+                        <p className="text-xs text-muted-foreground">{formatFileSize(att.size)}</p>
+                      </div>
+                      {canPreview && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewAttachment(att)}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-background"
+                          title={tFiles('preview')}
+                          aria-label={`${tFiles('preview')}: ${att.name}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(index)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded hover:bg-background hover:text-red-500"
+                        title={att.uploading ? t('upload_cancel') : undefined}
+                        aria-label={`${tCommon('delete')}: ${att.name}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                {attachments.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllAttachments(prev => !prev)}
+                    className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {showAllAttachments ? t('show_less') : `+${attachments.length - 3}`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Body */}
@@ -2600,81 +2718,6 @@ export function EmailComposer({
           />
         ) : null}
       </div>
-
-        {/* Attachments */}
-        {attachments.length > 0 && (
-          <div className="px-4 py-2 border-t shrink-0">
-            <div className="flex flex-wrap gap-2">
-              {(showAllAttachments ? attachments : attachments.slice(0, 3)).map((att, index) => {
-                // Clickable to preview only once it has content (local File or an
-                // uploaded blob) and the type is previewable; never mid-upload.
-                const canPreview = !att.uploading && !att.error
-                  && (!!att.file || !!att.blobId)
-                  && isFilePreviewable(att.name, att.type);
-                const label = (
-                  <>
-                    <span className="max-w-[150px] md:max-w-[200px] truncate">{att.name}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      ({formatFileSize(att.size)})
-                    </span>
-                  </>
-                );
-                return (
-                <div
-                  key={index}
-                  className={cn(
-                    "relative flex items-center gap-2 px-3 py-1.5 rounded-md text-sm overflow-hidden",
-                    att.error ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-muted text-foreground"
-                  )}
-                >
-                  {att.uploading && (
-                    <div className="absolute inset-0 pointer-events-none">
-                      <div className="h-full bg-primary/10 animate-pulse" />
-                      <div className="absolute bottom-0 left-0 h-0.5 bg-primary/40 animate-[indeterminate_1.5s_ease-in-out_infinite]" style={{ width: '40%' }} />
-                    </div>
-                  )}
-                  <div className="relative flex items-center gap-2">
-                    {att.uploading ? (
-                      <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
-                    ) : att.error ? (
-                      <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                    ) : (
-                      <Paperclip className="w-3 h-3 flex-shrink-0" />
-                    )}
-                    {canPreview ? (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewAttachment(att)}
-                        title={att.name}
-                        className="flex items-center gap-2 min-w-0 hover:underline"
-                      >
-                        {label}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2 min-w-0">{label}</div>
-                    )}
-                    <button
-                      onClick={() => removeAttachment(index)}
-                      className="ms-1 hover:text-red-500 min-w-[20px] min-h-[20px] flex items-center justify-center"
-                      title={att.uploading ? t('upload_cancel') : undefined}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-                );
-              })}
-              {attachments.length > 3 && (
-                <button
-                  onClick={() => setShowAllAttachments(prev => !prev)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-sm bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showAllAttachments ? t('show_less') : `+${attachments.length - 3}`}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Bottom toolbar */}
         <div className="flex items-center justify-between px-4 py-2.5 border-t bg-background shrink-0 pb-[calc(0.625rem+env(safe-area-inset-bottom)/2)]">

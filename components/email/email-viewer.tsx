@@ -91,7 +91,7 @@ import { useTour } from "@/components/tour/tour-provider";
 import { useIsEmbedded } from "@/hooks/use-is-embedded";
 import { findCalendarAttachment, isCalendarMimeType } from "@/lib/calendar-invitation";
 import { RecipientPopover } from "./recipient-popover";
-import { isFilePreviewable, isMimeTypeSafeForInlinePreview } from "@/lib/file-preview";
+import { getFilePreviewKind, isFilePreviewable, isMimeTypeSafeForInlinePreview } from "@/lib/file-preview";
 import { parseTnef, isTnefAttachment } from "@/lib/tnef";
 import { debug } from "@/lib/debug";
 import type { TnefAttachment } from "@/lib/tnef";
@@ -103,6 +103,8 @@ import type { AttachmentInfo, AttachmentPreview } from "@/lib/plugin-types";
 import { useAttachmentDrag, isDragOutSupported, type AttachmentDragSource } from "@/hooks/use-attachment-drag";
 import type { IJMAPClient } from "@/lib/jmap/client-interface";
 import { ImageGallery, type GalleryImage } from "./image-gallery";
+import { DocumentThumbnail } from "@/components/files/document-thumbnail";
+import { FilePreviewModal } from "@/components/files/file-preview-modal";
 
 interface EmailViewerProps {
   email: Email | null;
@@ -338,6 +340,34 @@ interface EffectiveAttachment {
   cid?: string;
   decryptedAttachment?: PostalMimeAttachment;
   tnefData?: Uint8Array;
+}
+
+function hasDocumentThumbnail(attachment: EffectiveAttachment): boolean {
+  const kind = getFilePreviewKind(attachment.name || undefined, attachment.type);
+  return kind === 'pdf' || kind === 'office';
+}
+
+function AttachmentCardPreview({
+  attachment,
+  imageUrl,
+  getFileContent,
+  className,
+}: {
+  attachment: EffectiveAttachment;
+  imageUrl?: string;
+  getFileContent: () => Promise<{ blob: Blob; contentType: string }>;
+  className: string;
+}) {
+  if (imageUrl) return <img src={imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />;
+  if (!hasDocumentThumbnail(attachment)) return null;
+  return (
+    <DocumentThumbnail
+      name={attachment.name || 'document'}
+      type={attachment.type}
+      getFileContent={getFileContent}
+      className={className}
+    />
+  );
 }
 
 function getPostalMimeAttachmentSize(attachment: PostalMimeAttachment): number {
@@ -819,6 +849,7 @@ export function EmailViewer({
   const belowHeaderGhostRef = useRef<HTMLDivElement>(null);
   const [imageThumbUrls, setImageThumbUrls] = useState<Record<string, string>>({});
   const [imageGallery, setImageGallery] = useState<{ images: GalleryImage[]; initialIndex: number } | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<EffectiveAttachment | null>(null);
   const galleryRequestRef = useRef(0);
   const galleryUrlsRef = useRef(new Map<string, string>());
   const galleryLoadsRef = useRef(new Map<string, Promise<string | null>>());
@@ -1568,6 +1599,22 @@ export function EmailViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email?.attachments, pluginRenderedAttachments, tnefHtml, tnefText, tnefAttachments, embeddedEmailUnwrapped, embeddedEmailAttachments, calendarInvitationParsingEnabled, hideInlineImageAttachments]);
 
+  const getEffectiveAttachmentContent = useCallback(async (attachment: EffectiveAttachment) => {
+    if (attachment.blobId && blobClient) {
+      const blob = await blobClient.fetchBlob(attachment.blobId, attachment.name || 'attachment', attachment.type, blobAccountId);
+      return { blob, contentType: attachment.type || blob.type || 'application/octet-stream' };
+    }
+    const bytes = attachment.tnefData ?? (attachment.decryptedAttachment ? getAttachmentContentBytes(attachment.decryptedAttachment) : null);
+    if (!bytes) throw new Error('No attachment content available');
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    return { blob: new Blob([buffer], { type: attachment.type || 'application/octet-stream' }), contentType: attachment.type || 'application/octet-stream' };
+  }, [blobAccountId, blobClient]);
+
+  const getPreviewAttachmentContent = useCallback(async () => {
+    if (!previewAttachment) throw new Error('No attachment selected');
+    return getEffectiveAttachmentContent(previewAttachment);
+  }, [getEffectiveAttachmentContent, previewAttachment]);
+
   // Measure attachment chips in the below-header row to determine how many fit
   // on a single line; the rest collapse into a "+N attachments" overflow pill.
   useLayoutEffect(() => {
@@ -1897,6 +1944,10 @@ export function EmailViewer({
   const handleEffectiveAttachmentOpen = useCallback(async (attachment: EffectiveAttachment) => {
     if (attachment.type.toLowerCase().startsWith('image/')) {
       await openImageGallery(attachment);
+      return;
+    }
+    if (hasDocumentThumbnail(attachment)) {
+      setPreviewAttachment(attachment);
       return;
     }
     const isPreviewable = isFilePreviewable(attachment.name || undefined, attachment.type);
@@ -3804,13 +3855,14 @@ export function EmailViewer({
                     const opensPreview = isPreviewable && mailAttachmentAction === 'preview';
                     const isImage = attachment.type.toLowerCase().startsWith('image/');
                     const thumbUrl = imageThumbUrls[attachment.id];
+                    const hasPreviewCard = isImage || hasDocumentThumbnail(attachment);
                     return (
                       <DraggableAttachmentChip key={attachment.id} attachment={attachment} client={blobClient} accountId={blobAccountId} enabled={dragOutActive} downloadName={resolveAttachmentName(attachment)}>
                         {(dragProps) => (
                       <div
                         className={cn(
                           "bg-muted/60 hover:bg-muted rounded-lg border border-border/50 group relative cursor-pointer overflow-hidden transition-colors",
-                          isImage
+                          hasPreviewCard
                             ? "flex flex-col w-56 shadow-sm"
                             : "flex w-full max-w-2xl items-center gap-3 px-4 py-3",
                         )}
@@ -3823,23 +3875,21 @@ export function EmailViewer({
                         onDragStart={dragProps.onDragStart}
                         onDragEnd={dragProps.onDragEnd}
                       >
-                        {isImage && (
+                        {hasPreviewCard && (
                           <div className="h-36 w-full bg-muted/80 flex items-center justify-center overflow-hidden">
-                            {thumbUrl ? (
-                              <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                            ) : (
+                            {isImage && !thumbUrl ? (
                               <Image className="h-7 w-7 text-muted-foreground/50" />
-                            )}
+                            ) : <AttachmentCardPreview attachment={attachment} imageUrl={thumbUrl} getFileContent={() => getEffectiveAttachmentContent(attachment)} className="flex h-full w-full items-center justify-center" />}
                           </div>
                         )}
                         <div className={cn(
                           "flex min-w-0 items-center gap-2",
-                          isImage ? "w-full border-t border-border/50 px-3 py-2" : "flex-1",
+                          hasPreviewCard ? "w-full border-t border-border/50 px-3 py-2" : "flex-1",
                         )}>
                           <FileIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <span className={cn(
                             "text-sm text-foreground",
-                            isImage ? "flex-1 min-w-0 truncate" : "min-w-0 break-all",
+                            hasPreviewCard ? "flex-1 min-w-0 truncate" : "min-w-0 break-all",
                           )}>
                             {getAttachmentDisplayName(attachment.name, attachment.type)}
                           </span>
@@ -3849,7 +3899,7 @@ export function EmailViewer({
                         </div>
                         <div className={cn(
                           "absolute bg-background/95 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 px-1.5 rounded-md",
-                          isImage ? "top-2 end-2" : "inset-y-0 end-0 rounded-s-none rounded-e-lg",
+                          hasPreviewCard ? "top-2 end-2" : "inset-y-0 end-0 rounded-s-none rounded-e-lg",
                         )}>
                           <button
                             className="p-1 hover:bg-accent rounded transition-colors"
@@ -4487,8 +4537,8 @@ export function EmailViewer({
             >
               {effectiveAttachments.map((attachment) => {
                 const FileIcon = getFileIcon(attachment.name || undefined, attachment.type);
-                const hasThumb = !!imageThumbUrls[attachment.id];
-                if (hasThumb) {
+                const hasPreviewCard = !!imageThumbUrls[attachment.id] || hasDocumentThumbnail(attachment);
+                if (hasPreviewCard) {
                   // Image chip is a fixed-width vertical card; only its width
                   // matters for the row-fit measurement.
                   return (
@@ -4522,13 +4572,14 @@ export function EmailViewer({
               const isPreviewable = isFilePreviewable(attachment.name || undefined, attachment.type);
               const opensPreview = isPreviewable && mailAttachmentAction === 'preview';
               const thumbUrl = imageThumbUrls[attachment.id];
+              const hasPreviewCard = !!thumbUrl || hasDocumentThumbnail(attachment);
               return (
                 <DraggableAttachmentChip key={attachment.id} attachment={attachment} client={blobClient} accountId={blobAccountId} enabled={dragOutActive} downloadName={resolveAttachmentName(attachment)}>
                   {(dragProps) => (
                 <div
                   className={cn(
                     "bg-muted/60 hover:bg-muted rounded-md border border-border/50 group relative cursor-pointer flex-shrink-0 overflow-hidden",
-                    thumbUrl
+                    hasPreviewCard
                       ? "inline-flex flex-col w-44"
                       : "inline-flex items-center gap-1.5 px-2.5 py-1.5",
                   )}
@@ -4541,24 +4592,19 @@ export function EmailViewer({
                   onDragStart={dragProps.onDragStart}
                   onDragEnd={dragProps.onDragEnd}
                 >
-                  {thumbUrl && (
+                  {hasPreviewCard && (
                     <div className="w-full h-20 bg-background/40 flex items-center justify-center overflow-hidden">
-                      <img
-                        src={thumbUrl}
-                        alt=""
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
+                      <AttachmentCardPreview attachment={attachment} imageUrl={thumbUrl} getFileContent={() => getEffectiveAttachmentContent(attachment)} className="flex h-full w-full items-center justify-center" />
                     </div>
                   )}
                   <div className={cn(
                     "flex items-center gap-1.5",
-                    thumbUrl && "px-2 py-1.5 border-t border-border/50 w-full",
+                    hasPreviewCard && "px-2 py-1.5 border-t border-border/50 w-full",
                   )}>
                     <FileIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <span className={cn(
                       "text-sm text-foreground truncate",
-                      thumbUrl ? "flex-1 min-w-0" : "max-w-[200px]",
+                      hasPreviewCard ? "flex-1 min-w-0" : "max-w-[200px]",
                     )}>
                       {getAttachmentDisplayName(attachment.name, attachment.type)}
                     </span>
@@ -4568,7 +4614,7 @@ export function EmailViewer({
                   </div>
                   <div className={cn(
                     "absolute rounded-md bg-background/95 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 px-1.5",
-                    thumbUrl ? "top-1 end-1" : "inset-y-0 end-0 rounded-e-md rounded-s-none",
+                    hasPreviewCard ? "top-1 end-1" : "inset-y-0 end-0 rounded-e-md rounded-s-none",
                   )}>
                     <button
                       className="p-1 hover:bg-accent rounded transition-colors"
@@ -4668,13 +4714,14 @@ export function EmailViewer({
                 const isPreviewable = isFilePreviewable(attachment.name || undefined, attachment.type);
                 const opensPreview = isPreviewable && mailAttachmentAction === 'preview';
                 const thumbUrl = imageThumbUrls[attachment.id];
+                const hasPreviewCard = !!thumbUrl || hasDocumentThumbnail(attachment);
                 return (
                   <DraggableAttachmentChip key={attachment.id} attachment={attachment} client={blobClient} accountId={blobAccountId} enabled={dragOutActive} downloadName={resolveAttachmentName(attachment)}>
                     {(dragProps) => (
                   <div
                     className={cn(
                       "bg-muted/60 hover:bg-muted rounded-md border border-border/50 group relative cursor-pointer overflow-hidden",
-                      thumbUrl
+                      hasPreviewCard
                         ? "inline-flex flex-col w-44"
                         : "inline-flex items-center gap-1.5 px-2.5 py-1.5",
                     )}
@@ -4687,19 +4734,19 @@ export function EmailViewer({
                     onDragStart={dragProps.onDragStart}
                     onDragEnd={dragProps.onDragEnd}
                   >
-                    {thumbUrl && (
+                    {hasPreviewCard && (
                       <div className="w-full h-20 bg-background/40 flex items-center justify-center overflow-hidden">
-                        <img src={thumbUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                        <AttachmentCardPreview attachment={attachment} imageUrl={thumbUrl} getFileContent={() => getEffectiveAttachmentContent(attachment)} className="flex h-full w-full items-center justify-center" />
                       </div>
                     )}
                     <div className={cn(
                       "flex items-center gap-1.5",
-                      thumbUrl && "px-2 py-1.5 border-t border-border/50 w-full",
+                      hasPreviewCard && "px-2 py-1.5 border-t border-border/50 w-full",
                     )}>
                       <FileIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                       <span className={cn(
                         "text-sm text-foreground truncate",
-                        thumbUrl ? "flex-1 min-w-0" : "max-w-[200px]",
+                        hasPreviewCard ? "flex-1 min-w-0" : "max-w-[200px]",
                       )}>
                         {getAttachmentDisplayName(attachment.name, attachment.type)}
                       </span>
@@ -4709,7 +4756,7 @@ export function EmailViewer({
                     </div>
                     <div className={cn(
                       "absolute bg-background/95 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 px-1.5 rounded-md",
-                      thumbUrl ? "top-1 end-1" : "inset-y-0 end-0 rounded-s-none rounded-e-md",
+                      hasPreviewCard ? "top-1 end-1" : "inset-y-0 end-0 rounded-s-none rounded-e-md",
                     )}>
                       <button
                         className="p-1 hover:bg-accent rounded transition-colors"
@@ -5136,6 +5183,15 @@ export function EmailViewer({
         initialIndex={imageGallery.initialIndex}
         loadImage={loadGalleryImage}
         onClose={closeImageGallery}
+      />
+    )}
+
+    {previewAttachment && (
+      <FilePreviewModal
+        name={previewAttachment.name || 'attachment'}
+        onClose={() => setPreviewAttachment(null)}
+        onDownload={() => handleEffectiveAttachmentDownload(previewAttachment)}
+        getFileContent={getPreviewAttachmentContent}
       />
     )}
 
