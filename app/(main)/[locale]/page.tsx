@@ -124,7 +124,7 @@ export default function Home() {
   useIdentitySync();
   const trustedSendersAddressBook = useSettingsStore((state) => state.trustedSendersAddressBook);
   const sendDelaySeconds = useSettingsStore((state) => state.sendDelaySeconds);
-  const { loadTrustedSendersBook, trustedSendersLoaded, loadRecentRecipients } = useContactStore();
+  const { loadTrustedSendersBook, trustedSendersLoaded, loadRecentRecipients, loadPopularIncomingSenders } = useContactStore();
 
   const promptForRescheduleDelayedUntil = useCallback((): string | null => {
     const value = window.prompt(t('email_viewer.reschedule_prompt'));
@@ -353,6 +353,15 @@ export default function Home() {
       loadRecentRecipients(client, sent.originalId || sent.id);
     }
   }, [client, mailboxes, loadRecentRecipients]);
+
+  // Populate the fallback half of empty-recipient suggestions from Inbox.
+  // The store counts senders and keeps the most frequent addresses first.
+  useEffect(() => {
+    const inbox = mailboxes.find((m) => m.role === 'inbox');
+    if (client && inbox) {
+      loadPopularIncomingSenders(client, inbox.originalId || inbox.id);
+    }
+  }, [client, mailboxes, loadPopularIncomingSenders]);
 
   // Pro shell: populate per-account mailbox cache so the sidebar can render
   // every connected account Thunderbird-style.

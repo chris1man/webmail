@@ -33,6 +33,11 @@ const defaultState = {
   activeTab: 'all' as const,
   directoryPrincipals: [],
   directoryLoaded: false,
+  recentRecipients: [],
+  recentRecipientsLoaded: false,
+  sentMailboxId: null,
+  popularIncomingSenders: [],
+  popularIncomingSendersLoaded: false,
 };
 
 describe('contact-store', () => {
@@ -158,6 +163,33 @@ describe('contact-store', () => {
       expect(state.error).toBeNull();
       expect(state.selectedContactIds.size).toBe(0);
       expect(state.activeTab).toBe('all');
+      expect(state.recentRecipients).toEqual([]);
+      expect(state.popularIncomingSenders).toEqual([]);
+    });
+  });
+
+  describe('loadPopularIncomingSenders', () => {
+    it('ranks Inbox senders by frequency, without duplicate addresses', async () => {
+      const client = {
+        getEmails: vi.fn().mockResolvedValue({
+          emails: [
+            { receivedAt: '2026-08-12T10:00:00Z', from: [{ name: 'Alice', email: 'alice@example.com' }] },
+            { receivedAt: '2026-08-11T10:00:00Z', from: [{ name: 'Bob', email: 'bob@example.com' }] },
+            { receivedAt: '2026-08-10T10:00:00Z', from: [{ name: 'Alice Updated', email: 'ALICE@example.com' }] },
+            { receivedAt: '2026-08-09T10:00:00Z', from: [{ name: 'Carol', email: 'carol@example.com' }] },
+            { receivedAt: '2026-08-08T10:00:00Z', from: [{ name: 'Bob', email: 'bob@example.com' }] },
+          ],
+        }),
+      } as never;
+
+      await useContactStore.getState().loadPopularIncomingSenders(client, 'inbox-id');
+
+      expect(useContactStore.getState().popularIncomingSenders).toEqual([
+        { name: 'Alice', email: 'alice@example.com' },
+        { name: 'Bob', email: 'bob@example.com' },
+        { name: 'Carol', email: 'carol@example.com' },
+      ]);
+      expect(useContactStore.getState().popularIncomingSendersLoaded).toBe(true);
     });
   });
 

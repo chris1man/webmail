@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -856,6 +856,8 @@ export function EmailComposer({
       ? `<div>${getPlainTextSignature(signatureIdentity).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</div>`
       : '';
   const getAutocomplete = useContactStore((s) => s.getAutocomplete);
+  const recentRecipients = useContactStore((s) => s.recentRecipients);
+  const popularIncomingSenders = useContactStore((s) => s.popularIncomingSenders);
   const getGroupMembers = useContactStore((s) => s.getGroupMembers);
   const searchRecipients = useContactStore((s) => s.searchRecipients);
   // Whether a Sent mailbox is known so the on-demand server search is worth
@@ -950,6 +952,41 @@ export function EmailComposer({
   const toDropdownRef = useRef<HTMLDivElement>(null);
   const ccDropdownRef = useRef<HTMLDivElement>(null);
   const bccDropdownRef = useRef<HTMLDivElement>(null);
+
+  // With an empty "To" field, start with the last three people the user wrote
+  // to, then fill the list with the most frequent Inbox senders. A single seen
+  // set keeps the two sources free of duplicate addresses.
+  const initialRecipientSuggestions = useMemo<Array<SuggestionItem>>(() => {
+    const suggestions: SuggestionItem[] = [];
+    const seen = new Set<string>();
+    const add = (recipient: { name: string; email: string }) => {
+      const key = recipient.email.trim().toLowerCase();
+      if (!key || seen.has(key) || suggestions.length >= 10) return;
+      seen.add(key);
+      suggestions.push({ name: recipient.name, email: recipient.email });
+    };
+
+    for (const recipient of recentRecipients) {
+      if (suggestions.length >= 3) break;
+      add(recipient);
+    }
+    for (const sender of popularIncomingSenders) add(sender);
+    return suggestions;
+  }, [recentRecipients, popularIncomingSenders]);
+
+  const handleEmptyToFocus = useCallback(() => {
+    if (to.length > 0 || toInput.trim()) return;
+    setAutoQuery('');
+    setAutocompleteResults(initialRecipientSuggestions);
+    setActiveAutoField('to');
+    setAutoSelectedIndex(-1);
+  }, [initialRecipientSuggestions, to.length, toInput]);
+
+  useEffect(() => {
+    if (activeAutoField !== 'to' || document.activeElement !== toInputRef.current || to.length > 0 || toInput.trim()) return;
+    setAutocompleteResults(initialRecipientSuggestions);
+    setAutoSelectedIndex(-1);
+  }, [activeAutoField, initialRecipientSuggestions, to.length, toInput]);
 
   const focusSubject = useCallback(() => {
     subjectInputRef.current?.focus();
@@ -2358,6 +2395,7 @@ export function EmailComposer({
               placeholder={t('to_placeholder')}
               field="to"
               onAutocomplete={handleAutocomplete}
+              onInputFocus={handleEmptyToFocus}
               onAutoKeyDown={handleAutoKeyDown}
               onAutoBlur={handleAutoBlur}
               activeAutoField={activeAutoField}
@@ -2979,6 +3017,7 @@ function RecipientChipInput({
   placeholder,
   field,
   onAutocomplete,
+  onInputFocus,
   onAutoKeyDown,
   onAutoBlur,
   activeAutoField,
@@ -3003,6 +3042,7 @@ function RecipientChipInput({
   placeholder: string;
   field: 'to' | 'cc' | 'bcc';
   onAutocomplete: (inputText: string, field: 'to' | 'cc' | 'bcc') => void;
+  onInputFocus?: () => void;
   onAutoKeyDown: (e: React.KeyboardEvent, field: 'to' | 'cc' | 'bcc') => void;
   onAutoBlur: (e: React.FocusEvent, field: 'to' | 'cc' | 'bcc') => void;
   activeAutoField: 'to' | 'cc' | 'bcc' | null;
@@ -3410,6 +3450,7 @@ function RecipientChipInput({
             placeholder={chips.length === 0 ? placeholder : ''}
             value={inputText}
             onChange={handleInputChange}
+            onFocus={onInputFocus}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             onBlur={handleBlur}

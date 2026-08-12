@@ -160,6 +160,11 @@ interface ContactStore {
   recentRecipientsLoaded: boolean;
   sentMailboxId: string | null;
 
+  // Frequent senders from the Inbox, used after the recent Sent recipients in
+  // the empty "To" field suggestion list. Runtime only.
+  popularIncomingSenders: Array<{ name: string; email: string }>;
+  popularIncomingSendersLoaded: boolean;
+
   selectedContactIds: Set<string>;
   lastSelectedContactId: string | null;
   activeTab: 'all' | 'groups';
@@ -222,6 +227,8 @@ interface ContactStore {
 
   // Recent recipients (compose autocomplete, derived from the Sent folder)
   loadRecentRecipients: (client: IJMAPClient, sentMailboxId: string) => Promise<void>;
+  // Frequent senders (compose empty-field suggestions, derived from Inbox)
+  loadPopularIncomingSenders: (client: IJMAPClient, inboxMailboxId: string) => Promise<void>;
   // On-demand "search the server" for recipients not in the recent cache
   searchRecipients: (client: IJMAPClient, query: string) => Promise<Array<{ name: string; email: string }>>;
 }
@@ -275,6 +282,8 @@ export const useContactStore = create<ContactStore>()(
       recentRecipients: [],
       recentRecipientsLoaded: false,
       sentMailboxId: null,
+      popularIncomingSenders: [],
+      popularIncomingSendersLoaded: false,
       selectedContactIds: new Set<string>(),
       lastSelectedContactId: null,
       activeTab: 'all' as const,
@@ -520,6 +529,11 @@ export const useContactStore = create<ContactStore>()(
         activeTab: 'all',
         directoryPrincipals: [],
         directoryLoaded: false,
+        recentRecipients: [],
+        recentRecipientsLoaded: false,
+        sentMailboxId: null,
+        popularIncomingSenders: [],
+        popularIncomingSendersLoaded: false,
       }),
 
       getAutocomplete: (query) => {
@@ -1012,6 +1026,40 @@ export const useContactStore = create<ContactStore>()(
         } catch (error) {
           debug.error('Failed to load recent recipients:', error);
           set({ recentRecipientsLoaded: true });
+        }
+      },
+
+      loadPopularIncomingSenders: async (client, inboxMailboxId) => {
+        if (get().popularIncomingSendersLoaded || !inboxMailboxId) return;
+        try {
+          const { emails } = await client.getEmails(inboxMailboxId, undefined, 300, 0);
+          const byEmail = new Map<string, { name: string; email: string; count: number; receivedAt: string }>();
+          for (const email of emails) {
+            for (const sender of email.from || []) {
+              if (!sender.email) continue;
+              const key = sender.email.toLowerCase().trim();
+              if (!key) continue;
+              const existing = byEmail.get(key);
+              if (existing) {
+                existing.count += 1;
+                continue;
+              }
+              byEmail.set(key, {
+                name: (sender.name || '').trim(),
+                email: sender.email,
+                count: 1,
+                receivedAt: email.receivedAt,
+              });
+            }
+          }
+          const popularIncomingSenders = Array.from(byEmail.values())
+            .sort((a, b) => b.count - a.count || b.receivedAt.localeCompare(a.receivedAt) || a.email.localeCompare(b.email))
+            .map(({ name, email }) => ({ name, email }));
+          set({ popularIncomingSenders, popularIncomingSendersLoaded: true });
+          debug.log('contacts', 'Loaded', popularIncomingSenders.length, 'popular senders from Inbox');
+        } catch (error) {
+          debug.error('Failed to load popular Inbox senders:', error);
+          set({ popularIncomingSendersLoaded: true });
         }
       },
 
