@@ -6,7 +6,7 @@ import { formatDate, stripInvisibleLeading } from "@/lib/utils";
 import { Email } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { SelectableAvatar } from "@/components/email/selectable-avatar";
-import { Paperclip, Star, Pin, CheckSquare, Square, Reply, Forward } from "lucide-react";
+import { Star, Pin, CheckSquare, Square, Reply, Forward } from "lucide-react";
 import { useEmailStore } from "@/stores/email-store";
 import { useSettingsStore, KEYWORD_PALETTE } from "@/stores/settings-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -17,6 +17,7 @@ import { EmailIdentityBadge } from "./email-identity-badge";
 import { EmailHoverActions } from "./email-hover-actions";
 import { getEmailColorTags } from "@/lib/thread-utils";
 import { ReadStatusToggle } from "./read-status-toggle";
+import { EmailAttachmentTypeIndicator } from "./attachment-type-badge";
 
 interface EmailListItemProps {
   email: Email;
@@ -227,7 +228,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
                     <Forward className="w-3.5 h-3.5 text-muted-foreground" />
                   </>
                 )}
-                {email.hasAttachment && <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />}
+                <EmailAttachmentTypeIndicator email={email} />
                 {keywordDefs.map((kd) => (
                   <span key={kd.id} className={cn('h-2.5 w-2.5 rounded-full', KEYWORD_PALETTE[kd.color]?.dot || 'bg-gray-400')} />
                 ))}
@@ -277,9 +278,7 @@ export function EmailListItem({ email, selected, onClick, onDoubleClick, onConte
                         <Forward className="w-3.5 h-3.5 text-muted-foreground" />
                       </>
                     )}
-                    {email.hasAttachment && (
-                      <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                    )}
+                    <EmailAttachmentTypeIndicator email={email} />
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">

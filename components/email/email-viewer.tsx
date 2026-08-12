@@ -105,6 +105,7 @@ import type { IJMAPClient } from "@/lib/jmap/client-interface";
 import { ImageGallery, type GalleryImage } from "./image-gallery";
 import { DocumentThumbnail } from "@/components/files/document-thumbnail";
 import { FilePreviewModal } from "@/components/files/file-preview-modal";
+import { AttachmentTypeBadge } from "@/components/email/attachment-type-badge";
 
 interface EmailViewerProps {
   email: Email | null;
@@ -3887,6 +3888,7 @@ export function EmailViewer({
                           hasPreviewCard ? "w-full border-t border-border/50 px-3 py-2" : "flex-1",
                         )}>
                           <FileIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <AttachmentTypeBadge name={attachment.name} type={attachment.type} />
                           <span className={cn(
                             "text-sm text-foreground",
                             hasPreviewCard ? "flex-1 min-w-0 truncate" : "min-w-0 break-all",
@@ -4602,6 +4604,7 @@ export function EmailViewer({
                     hasPreviewCard && "px-2 py-1.5 border-t border-border/50 w-full",
                   )}>
                     <FileIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <AttachmentTypeBadge name={attachment.name} type={attachment.type} />
                     <span className={cn(
                       "text-sm text-foreground truncate",
                       hasPreviewCard ? "flex-1 min-w-0" : "max-w-[200px]",
@@ -4744,6 +4747,7 @@ export function EmailViewer({
                       hasPreviewCard && "px-2 py-1.5 border-t border-border/50 w-full",
                     )}>
                       <FileIcon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <AttachmentTypeBadge name={attachment.name} type={attachment.type} />
                       <span className={cn(
                         "text-sm text-foreground truncate",
                         hasPreviewCard ? "flex-1 min-w-0" : "max-w-[200px]",

@@ -6,12 +6,13 @@ import { formatDate } from "@/lib/utils";
 import { Email } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/avatar";
-import { Paperclip, Star, Circle, CheckSquare, Square, Reply, Forward } from "lucide-react";
+import { Star, Circle, CheckSquare, Square, Reply, Forward } from "lucide-react";
 import { useEmailDrag } from "@/hooks/use-email-drag";
 import { useLongPress } from "@/hooks/use-long-press";
 import { useEmailStore } from "@/stores/email-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUIStore } from "@/stores/ui-store";
+import { EmailAttachmentTypeIndicator } from "./attachment-type-badge";
 
 interface ThreadEmailItemProps {
   email: Email;
@@ -175,9 +176,7 @@ export function ThreadEmailItem({
                   <Forward className="w-3 h-3 text-muted-foreground" />
                 </>
               )}
-              {email.hasAttachment && (
-                <Paperclip className="w-3 h-3 text-muted-foreground" />
-              )}
+              <EmailAttachmentTypeIndicator email={email} className="[&>svg]:h-3 [&>svg]:w-3" />
             </div>
 
             {/* Preview snippet */}

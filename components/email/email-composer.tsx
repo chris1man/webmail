@@ -29,6 +29,7 @@ import { PluginSlot } from "@/components/plugins/plugin-slot";
 import { Avatar } from "@/components/ui/avatar";
 import { FilePreviewModal } from "@/components/files/file-preview-modal";
 import { DocumentThumbnail } from "@/components/files/document-thumbnail";
+import { AttachmentTypeBadge } from "@/components/email/attachment-type-badge";
 import { useContactStore, getContactDisplayName, getContactPrimaryEmail } from "@/stores/contact-store";
 import { useTemplateStore } from "@/stores/template-store";
 import { SubAddressHelper } from "@/components/identity/sub-address-helper";
@@ -208,34 +209,6 @@ type ComposerAttachment = {
   error?: boolean;
   abortController?: AbortController;
 };
-
-function getAttachmentTypeLabel(name: string, type: string): string {
-  const extension = name.split('.').pop()?.trim().toLowerCase();
-  if (extension) return extension.toUpperCase();
-  if (type === 'application/pdf') return 'PDF';
-  if (type.startsWith('image/')) return 'IMG';
-  if (type.startsWith('audio/')) return 'AUDIO';
-  if (type.startsWith('video/')) return 'VIDEO';
-  return 'FILE';
-}
-
-function AttachmentTypeBadge({ name, type }: Pick<ComposerAttachment, 'name' | 'type'>) {
-  const label = getAttachmentTypeLabel(name, type);
-  const tone = label === 'PDF'
-    ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-    : ['DOC', 'DOCX', 'ODT', 'RTF'].includes(label)
-      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-      : ['XLS', 'XLSX', 'CSV', 'ODS'].includes(label)
-        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-        : ['PPT', 'PPTX', 'ODP'].includes(label)
-          ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400'
-          : 'bg-muted-foreground/10 text-muted-foreground';
-  return (
-    <span className={cn('inline-flex min-w-9 justify-center rounded px-1.5 py-1 text-[10px] font-bold leading-none', tone)} aria-label={label}>
-      {label}
-    </span>
-  );
-}
 
 type SignatureIdentityLike = {
   htmlSignature?: string;

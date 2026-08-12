@@ -5,7 +5,7 @@ import { formatDate, formatDateTime, stripInvisibleLeading } from "@/lib/utils";
 import { Email, ThreadGroup } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { SelectableAvatar } from "@/components/email/selectable-avatar";
-import { Paperclip, Star, Pin, ChevronRight, ChevronDown, Loader2, MessageSquare, CheckSquare, Square, Reply, Forward, CalendarClock, Folder } from "lucide-react";
+import { Star, Pin, ChevronRight, ChevronDown, Loader2, MessageSquare, CheckSquare, Square, Reply, Forward, CalendarClock, Folder } from "lucide-react";
 import { useSettingsStore, KEYWORD_PALETTE } from "@/stores/settings-store";
 import { useUIStore } from "@/stores/ui-store";
 import { useEmailStore } from "@/stores/email-store";
@@ -17,6 +17,7 @@ import { ThreadEmailItem } from "./thread-email-item";
 import { EmailHoverActions } from "./email-hover-actions";
 import { useTranslations } from "next-intl";
 import { ReadStatusToggle } from "./read-status-toggle";
+import { EmailAttachmentTypeIndicator } from "./attachment-type-badge";
 
 /**
  * Small chip showing the originating folder of a message, rendered in the
@@ -278,7 +279,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                       <Forward className="w-3.5 h-3.5 text-muted-foreground" />
                     </>
                   )}
-                  {email.hasAttachment && <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />}
+                  <EmailAttachmentTypeIndicator email={email} />
                   {resolvedKeywordDefs.map((kd) => (
                     <span key={kd.id} className={cn('h-2.5 w-2.5 rounded-full', KEYWORD_PALETTE[kd.color]?.dot || 'bg-gray-400')} />
                   ))}
@@ -339,9 +340,7 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                           <Forward className="w-3.5 h-3.5 text-muted-foreground" />
                         </>
                       )}
-                      {email.hasAttachment && (
-                        <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                      )}
+                      <EmailAttachmentTypeIndicator email={email} />
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -737,7 +736,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                         <Forward className="w-3.5 h-3.5 text-muted-foreground" />
                       </>
                     )}
-                    {hasAttachment && <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />}
+                    {hasAttachment && <EmailAttachmentTypeIndicator email={latestEmail} />}
                     {keywordDef && (
                       <span className={cn('h-2.5 w-2.5 rounded-full', KEYWORD_PALETTE[keywordDef.color]?.dot || 'bg-gray-400')} />
                     )}
@@ -810,9 +809,7 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                             <Forward className="w-3.5 h-3.5 text-muted-foreground" />
                           </>
                         )}
-                        {hasAttachment && (
-                          <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
-                        )}
+                        {hasAttachment && <EmailAttachmentTypeIndicator email={latestEmail} />}
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">

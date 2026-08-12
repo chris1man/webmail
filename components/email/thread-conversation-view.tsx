@@ -18,7 +18,6 @@ import {
   Reply,
   ReplyAll,
   Forward,
-  Paperclip,
   Star,
   Download,
   Loader2,
@@ -31,6 +30,7 @@ import {
   Eye,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { EmailAttachmentTypeIndicator } from "./attachment-type-badge";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useContactStore } from "@/stores/contact-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -558,9 +558,7 @@ function EmailCard({
             {isStarred && (
               <Star className="w-4 h-4 fill-amber-400 text-amber-400 flex-shrink-0" />
             )}
-            {email.hasAttachment && (
-              <Paperclip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-            )}
+            <EmailAttachmentTypeIndicator email={email} />
           </div>
           <div className="text-sm text-muted-foreground">
             {formatDate(email.receivedAt)}

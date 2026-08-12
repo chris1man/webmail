@@ -148,6 +148,9 @@ const EMAIL_LIST_PROPERTIES = [
   "subject",
   "preview",
   "hasAttachment",
+  // Metadata only: lets compact mail rows identify PDF/DOCX/etc. beside the
+  // paperclip without downloading attachment content.
+  "attachments",
   // Needed so list rows can serve drag-out to the file system as .eml.
   "blobId",
 ] as const;
