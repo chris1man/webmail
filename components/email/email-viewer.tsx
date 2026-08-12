@@ -2871,6 +2871,19 @@ export function EmailViewer({
   const isStarred = email.keywords?.$flagged;
   const isUnread = !email.keywords?.$seen;
   const isImportant = email.keywords?.["$important"];
+  // In aggregate views, use the message's actual mailbox rather than the
+  // virtual view (e.g. "All mail") so the badge describes this exact copy.
+  const messageMailboxRole = mailboxes.find((mailbox) =>
+    email.mailboxIds[mailbox.id] || (mailbox.originalId && email.mailboxIds[mailbox.originalId])
+  )?.role ?? currentMailboxRole;
+  const messageFolderBadge = {
+    inbox: { label: 'ВХОД', title: 'Входящее письмо', Icon: Inbox, className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
+    sent: { label: 'ОТПР', title: 'Отправленное письмо', Icon: Send, className: 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
+    drafts: { label: 'ЧЕРН', title: 'Черновик', Icon: FileText, className: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300' },
+    archive: { label: 'АРХ', title: 'Архив', Icon: Archive, className: 'border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300' },
+    junk: { label: 'СПАМ', title: 'Спам', Icon: ShieldAlert, className: 'border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300' },
+    trash: { label: 'КОРЗ', title: 'Корзина', Icon: Trash2, className: 'border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300' },
+  }[messageMailboxRole ?? ''];
 
   // Shared toolbar items used by both 'top' and 'below-subject' positions
   const renderToolbarItems = (showBackButton: boolean) => (
@@ -3665,6 +3678,12 @@ export function EmailViewer({
                 <h1 className="text-lg lg:text-xl font-bold text-foreground tracking-tight break-words min-w-0">
                   {email.subject || t('no_subject')}
                 </h1>
+                {messageFolderBadge && (
+                  <span title={messageFolderBadge.title} className={cn('mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold', messageFolderBadge.className)}>
+                    <messageFolderBadge.Icon className="h-3 w-3" />
+                    {messageFolderBadge.label}
+                  </span>
+                )}
                 {/* Star inline with subject (top toolbar mode) */}
                 {toolbarPosition === 'top' && (
                   <button

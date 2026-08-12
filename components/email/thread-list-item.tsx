@@ -2,10 +2,10 @@
 
 import React, { useCallback } from "react";
 import { formatDate, formatDateTime, stripInvisibleLeading } from "@/lib/utils";
-import { Email, Mailbox, ThreadGroup } from "@/lib/jmap/types";
+import { Email, ThreadGroup } from "@/lib/jmap/types";
 import { cn } from "@/lib/utils";
 import { SelectableAvatar } from "@/components/email/selectable-avatar";
-import { Star, Pin, ChevronRight, ChevronDown, Loader2, MessageSquare, CheckSquare, Square, Reply, Forward, CalendarClock, Folder, Inbox, Send, FilePenLine, Archive, ShieldAlert, Trash2 } from "lucide-react";
+import { Star, Pin, ChevronRight, ChevronDown, Loader2, MessageSquare, CheckSquare, Square, Reply, Forward, CalendarClock, Folder } from "lucide-react";
 import { useSettingsStore, KEYWORD_PALETTE } from "@/stores/settings-store";
 import { useUIStore } from "@/stores/ui-store";
 import { useEmailStore } from "@/stores/email-store";
@@ -32,36 +32,6 @@ function SourceFolderTag({ name }: { name: string }) {
     >
       <Folder className="h-3 w-3 shrink-0" />
       <span className="truncate">{name}</span>
-    </span>
-  );
-}
-
-type MailboxBadgeRole = 'inbox' | 'sent' | 'drafts' | 'archive' | 'junk' | 'trash';
-
-function getMailboxBadgeRole(email: Email, selectedRole: string | undefined, mailboxes: Mailbox[]): MailboxBadgeRole | null {
-  if (selectedRole && ['inbox', 'sent', 'drafts', 'archive', 'junk', 'trash'].includes(selectedRole)) {
-    return selectedRole as MailboxBadgeRole;
-  }
-  return mailboxes.find((mailbox) => email.mailboxIds[mailbox.id] || (mailbox.originalId && email.mailboxIds[mailbox.originalId]))?.role as MailboxBadgeRole | undefined ?? null;
-}
-
-function MailboxStatusBadge({ role }: { role: MailboxBadgeRole | null }) {
-  const t = useTranslations('mailboxes');
-  if (!role) return null;
-  const meta = {
-    inbox: { Icon: Inbox, className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' },
-    sent: { Icon: Send, className: 'border-sky-500/20 bg-sky-500/10 text-sky-700 dark:text-sky-300' },
-    drafts: { Icon: FilePenLine, className: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300' },
-    archive: { Icon: Archive, className: 'border-violet-500/20 bg-violet-500/10 text-violet-700 dark:text-violet-300' },
-    junk: { Icon: ShieldAlert, className: 'border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300' },
-    trash: { Icon: Trash2, className: 'border-rose-500/20 bg-rose-500/10 text-rose-700 dark:text-rose-300' },
-  }[role];
-  const label = t(role === 'junk' ? 'spam' : role);
-  const shortLabel = role === 'inbox' ? 'ВХОД' : role === 'sent' ? 'ОТПР' : label;
-  return (
-    <span title={label} className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold', meta.className)}>
-      <meta.Icon className="h-3 w-3" />
-      <span>{shortLabel}</span>
     </span>
   );
 }
@@ -130,7 +100,6 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
     const hideJunkAvatarImages = currentMailboxRole === 'junk' && !showAvatarsInJunk;
     // Show the originating folder in the aggregate "All …" views.
     const showSourceFolder = isUnifiedView && !!email.sourceFolder;
-    const mailboxBadgeRole = getMailboxBadgeRole(email, currentMailboxRole, mailboxes);
     const getAccountById = useAccountStore((state) => state.getAccountById);
     const accountColor = email.accountId ? getAccountById(email.accountId)?.avatarColor : undefined;
     const isChecked = selectedEmailIds.has(email.id);
@@ -315,7 +284,6 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                     <span key={kd.id} className={cn('h-2.5 w-2.5 rounded-full', KEYWORD_PALETTE[kd.color]?.dot || 'bg-gray-400')} />
                   ))}
                   {showSourceFolder && <SourceFolderTag name={email.sourceFolder!} />}
-                  <MailboxStatusBadge role={mailboxBadgeRole} />
                   {scheduledSendLabel ? (
                     <span
                       className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium tabular-nums text-sky-700 dark:text-sky-300"
@@ -386,7 +354,6 @@ const SingleEmailItem = React.forwardRef<HTMLDivElement, SingleEmailItemProps>(
                       </span>
                     ))}
                     {showSourceFolder && <SourceFolderTag name={email.sourceFolder!} />}
-                    <MailboxStatusBadge role={mailboxBadgeRole} />
                     {scheduledSendLabel ? (
                       <span
                         className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-sky-700 dark:text-sky-300"
@@ -501,7 +468,6 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
     // the unified role so junk-contextual UI and avatar hiding work.
     const currentMailboxRole = mailboxes.find(mb => mb.id === selectedMailbox)?.role
       ?? (isUnifiedView ? (unifiedRole ?? undefined) : undefined);
-    const mailboxBadgeRole = getMailboxBadgeRole(latestEmail, currentMailboxRole, mailboxes);
     const showRecipient = currentMailboxRole === 'sent' || currentMailboxRole === 'drafts';
     const displayNames = showRecipient
       ? Array.from(new Set(
@@ -775,7 +741,6 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                       <span className={cn('h-2.5 w-2.5 rounded-full', KEYWORD_PALETTE[keywordDef.color]?.dot || 'bg-gray-400')} />
                     )}
                     {showSourceFolder && <SourceFolderTag name={latestEmail.sourceFolder!} />}
-                    <MailboxStatusBadge role={mailboxBadgeRole} />
                     {scheduledSendLabel ? (
                       <span
                         className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium tabular-nums text-sky-700 dark:text-sky-300"
@@ -858,7 +823,6 @@ export const ThreadListItem = React.forwardRef<HTMLDivElement, ThreadListItemPro
                         </span>
                       )}
                       {showSourceFolder && <SourceFolderTag name={latestEmail.sourceFolder!} />}
-                      <MailboxStatusBadge role={mailboxBadgeRole} />
                       {scheduledSendLabel ? (
                         <span
                           className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 truncate rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-sky-700 dark:text-sky-300"
