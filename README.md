@@ -167,12 +167,13 @@ Endpoints are auto-discovered via `.well-known/oauth-authorization-server` or `.
 ```env
 SESSION_SECRET=                      # openssl rand -base64 32
 SESSION_SECRET_FILE=/session-secret  # path to a file containing the secret
+SESSION_COOKIE_DAYS=90               # optional; default 90, maximum 365
 
 SETTINGS_SYNC_ENABLED=true
 SETTINGS_DATA_DIR=./data/settings    # mount as a volume in Docker
 ```
 
-Credentials are encrypted with AES-256-GCM and stored in an httpOnly cookie (30-day expiry). Settings sync stores per-account preferences encrypted at rest and requires `SESSION_SECRET`.
+Credentials are encrypted with AES-256-GCM and stored in an httpOnly cookie (90-day expiry by default). Set `SESSION_COOKIE_DAYS` to a value from 1 to 365 to adjust it. `SESSION_SECRET` must be stable across container restarts—prefer a Docker secret or a mounted `SESSION_SECRET_FILE`; changing it invalidates every saved session. Settings sync stores per-account preferences encrypted at rest and requires `SESSION_SECRET`.
 
 </details>
 

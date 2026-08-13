@@ -122,6 +122,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
 
+    // Sliding expiration: a user who is actively returning to the mailbox
+    // should not be logged out merely because the original login was months
+    // ago. Re-issue the unchanged encrypted payload with the configured TTL.
+    cookieStore.set(cookieName, token, sessionCookieOptions());
+
     setStalwartAuthContextInStore(cookieStore, slot, {
       serverUrl: credentials.serverUrl,
       username: credentials.username,
@@ -171,6 +176,9 @@ export async function PUT(request: NextRequest) {
       clearStalwartAuthContextInStore(cookieStore, slot);
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
     }
+
+    // Match GET: restoring a session also renews its persistent cookie.
+    cookieStore.set(cookieName, token, sessionCookieOptions());
 
     setStalwartAuthContextInStore(cookieStore, slot, {
       serverUrl: credentials.serverUrl,

@@ -1,4 +1,5 @@
 import { configManager } from '@/lib/admin/config-manager';
+import { SESSION_COOKIE_MAX_AGE } from '@/lib/auth/session-cookie';
 
 type SameSite = 'lax' | 'none' | 'strict';
 
@@ -12,6 +13,6 @@ export function getCookieOptions() {
     secure,
     sameSite,
     path: '/',
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: SESSION_COOKIE_MAX_AGE,
   };
 }

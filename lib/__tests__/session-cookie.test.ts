@@ -6,9 +6,9 @@ import {
 } from '@/lib/auth/session-cookie';
 
 describe('session-cookie', () => {
-  it('exposes the legacy cookie name and 30-day max-age', () => {
+  it('exposes the legacy cookie name and 90-day default max-age', () => {
     expect(SESSION_COOKIE).toBe('jmap_session');
-    expect(SESSION_COOKIE_MAX_AGE).toBe(2592000); // 30 * 24 * 60 * 60
+    expect(SESSION_COOKIE_MAX_AGE).toBe(7776000); // 90 * 24 * 60 * 60
   });
 
   it('uses the bare legacy name for slot 0 (no suffix)', () => {
