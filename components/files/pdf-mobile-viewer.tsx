@@ -105,18 +105,20 @@ export function PdfMobileViewer({ url }: { url: string }) {
           const TextLayer = (pdfjs as unknown as { TextLayer?: new (options: { textContentSource: unknown; container: HTMLDivElement; viewport: typeof viewport }) => { render: () => Promise<void> } }).TextLayer;
           if (TextLayer) await new TextLayer({ textContentSource: textContent, container: textLayer, viewport }).render();
           const annotations = await page.getAnnotations();
+          const links: Array<{ left: number; top: number; width: number; height: number; url: string }> = [];
           for (const annotation of annotations) {
             if (annotation.subtype !== "Link" || !annotation.url) continue;
             const rect = viewport.convertToViewportRectangle(annotation.rect);
             const left = Math.min(rect[0], rect[2]); const top = Math.min(rect[1], rect[3]);
-            const link = document.createElement("a");
-            link.href = annotation.url; link.target = "_blank"; link.rel = "noopener noreferrer";
-            link.className = "absolute z-10 rounded-sm outline-none hover:ring-2 hover:ring-primary/60";
-            link.style.left = `${left}px`; link.style.top = `${top}px`;
-            link.style.width = `${Math.abs(rect[0] - rect[2])}px`; link.style.height = `${Math.abs(rect[1] - rect[3])}px`;
-            link.setAttribute("aria-label", "Открыть ссылку из документа");
-            pageHost.appendChild(link);
+            links.push({ left, top, width: Math.abs(rect[0] - rect[2]), height: Math.abs(rect[1] - rect[3]), url: annotation.url });
           }
+          pageHost.addEventListener("click", (event) => {
+            if (window.getSelection()?.toString()) return;
+            const bounds = pageHost.getBoundingClientRect();
+            const x = event.clientX - bounds.left; const y = event.clientY - bounds.top;
+            const link = links.find((item) => x >= item.left && x <= item.left + item.width && y >= item.top && y <= item.top + item.height);
+            if (link) window.open(link.url, "_blank", "noopener,noreferrer");
+          });
         }
         if (!cancelled) setStatus("ready");
       } catch {
