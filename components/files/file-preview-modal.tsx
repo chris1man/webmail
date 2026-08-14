@@ -11,7 +11,7 @@ import { EmlPreview, type ParsedEml } from "@/components/files/eml-preview";
 // Use PDF.js everywhere. Browser-native PDF viewers vary considerably and can
 // silently fail for valid mail attachments that use less common PDF features.
 const PdfViewer = dynamic(
-  () => import("@/components/files/pdf-mobile-viewer").then((m) => m.PdfMobileViewer),
+  () => import("@/components/files/official-pdf-viewer").then((m) => m.OfficialPdfViewer),
   { ssr: false },
 );
 
