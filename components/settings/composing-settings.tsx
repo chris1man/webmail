@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { SettingsSection, SettingItem, Select, ToggleSwitch } from './settings-section';
+import { DEFAULT_IMAGE_ATTACHMENT_QUALITY, IMAGE_ATTACHMENT_MAX_DIMENSION } from '@/lib/image-attachment-optimizer';
 import { X } from 'lucide-react';
 import {
   SUPPORTED_SUB_ADDRESS_DELIMITERS,
@@ -25,6 +26,10 @@ export function ComposingSettings() {
     rtlEditingSupport,
     attachmentReminderEnabled,
     attachmentReminderKeywords,
+    imageAttachmentOptimizationEnabled,
+    imageAttachmentQuality,
+    imageAttachmentOutputFormat,
+    imageAttachmentMaxDimension,
     subAddressDelimiter,
     signaturePosition,
     signatureSeparatorEnabled,
@@ -200,6 +205,38 @@ export function ComposingSettings() {
               {t('attachment_reminder.add')}
             </button>
           </form>
+        </div>
+      )}
+
+      <SettingItem label="Сжимать изображения перед отправкой" description="Оптимизирует JPEG, PNG и WebP до загрузки. Оригинал не сохраняется.">
+        <ToggleSwitch checked={imageAttachmentOptimizationEnabled} onChange={(checked) => updateSetting('imageAttachmentOptimizationEnabled', checked)} />
+      </SettingItem>
+      {imageAttachmentOptimizationEnabled && (
+        <div className="space-y-3 border-b border-border py-3">
+          <SettingItem label="Качество сжатия" description="Большее значение даёт лучшее качество и больший размер.">
+            <div className="flex items-center gap-2">
+              <input type="range" min="40" max="95" step="1" value={imageAttachmentQuality} onChange={(event) => updateSetting('imageAttachmentQuality', Number(event.target.value))} className="w-28" aria-label="Качество сжатия изображений" />
+              <span className="w-9 text-right text-sm tabular-nums">{imageAttachmentQuality}</span>
+            </div>
+          </SettingItem>
+          <SettingItem label="Формат результата" description="PNG в режиме «Сохранить формат» сжимается без смены типа файла.">
+            <Select value={imageAttachmentOutputFormat} onChange={(value) => updateSetting('imageAttachmentOutputFormat', value as 'webp' | 'jpeg' | 'preserve')} options={[
+              { value: 'webp', label: 'Все в WebP' },
+              { value: 'jpeg', label: 'Все в JPEG' },
+              { value: 'preserve', label: 'Сохранить формат (PNG — без конвертации)' },
+            ]} />
+          </SettingItem>
+          <SettingItem label="Максимальная длинная сторона" description="Изображения больше этого значения уменьшаются пропорционально.">
+            <div className="flex items-center gap-2">
+              <input type="number" min="320" max="6000" step="100" value={imageAttachmentMaxDimension} onChange={(event) => updateSetting('imageAttachmentMaxDimension', Math.max(320, Math.min(6000, Number(event.target.value) || IMAGE_ATTACHMENT_MAX_DIMENSION)))} className="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm" aria-label="Максимальная длинная сторона изображения" />
+              <span className="text-sm text-muted-foreground">px</span>
+              <button type="button" onClick={() => {
+                updateSetting('imageAttachmentQuality', DEFAULT_IMAGE_ATTACHMENT_QUALITY);
+                updateSetting('imageAttachmentOutputFormat', 'webp');
+                updateSetting('imageAttachmentMaxDimension', IMAGE_ATTACHMENT_MAX_DIMENSION);
+              }} className="rounded-md bg-muted px-2.5 py-1.5 text-xs hover:bg-accent">Сбросить</button>
+            </div>
+          </SettingItem>
         </div>
       )}
     </SettingsSection>

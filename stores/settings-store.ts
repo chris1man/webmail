@@ -52,6 +52,7 @@ export type FirstDayOfWeek = 0 | 1 | 6; // 0 = Sunday, 1 = Monday, 6 = Saturday
 export type ExternalContentPolicy = 'ask' | 'block' | 'allow';
 export type MailAttachmentAction = 'preview' | 'download';
 export type AttachmentPosition = 'beside-sender' | 'below-header';
+export type ImageAttachmentOutputFormat = 'webp' | 'jpeg' | 'preserve';
 export type ToolbarPosition = 'top' | 'below-subject';
 export type ArchiveMode = 'single' | 'year' | 'month';
 export type MailLayout = 'split' | 'focus' | 'horizontal';
@@ -299,6 +300,11 @@ interface SettingsState {
   // Render image attachments as thumbnail cards (preview the actual image
   // contents inside the chip) instead of generic file icons.
   attachmentImagePreviewsEnabled: boolean;
+  // Browser-side compression of image attachments before they are uploaded.
+  imageAttachmentOptimizationEnabled: boolean;
+  imageAttachmentQuality: number;
+  imageAttachmentOutputFormat: ImageAttachmentOutputFormat;
+  imageAttachmentMaxDimension: number;
 
   // Sidebar Apps
   sidebarApps: SidebarApp[];
@@ -519,6 +525,10 @@ const DEFAULT_SETTINGS = {
 
   hideInlineImageAttachments: true,
   attachmentImagePreviewsEnabled: true,
+  imageAttachmentOptimizationEnabled: true,
+  imageAttachmentQuality: 78,
+  imageAttachmentOutputFormat: 'webp' as ImageAttachmentOutputFormat,
+  imageAttachmentMaxDimension: 1200,
 
   // Sidebar Apps
   sidebarApps: [] as SidebarApp[],
@@ -665,6 +675,10 @@ export const useSettingsStore = create<SettingsState>()(
           attachmentReminderKeywords: state.attachmentReminderKeywords,
           hideInlineImageAttachments: state.hideInlineImageAttachments,
           attachmentImagePreviewsEnabled: state.attachmentImagePreviewsEnabled,
+          imageAttachmentOptimizationEnabled: state.imageAttachmentOptimizationEnabled,
+          imageAttachmentQuality: state.imageAttachmentQuality,
+          imageAttachmentOutputFormat: state.imageAttachmentOutputFormat,
+          imageAttachmentMaxDimension: state.imageAttachmentMaxDimension,
           sidebarApps: state.sidebarApps,
           keepAppsLoaded: state.keepAppsLoaded,
           onboardingCompleted: state.onboardingCompleted,
@@ -907,7 +921,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      version: 7,
+      version: 8,
       migrate: migrateSettings,
       onRehydrateStorage: () => {
         return (state) => {
@@ -987,6 +1001,12 @@ export function migrateSettings(persisted: unknown, version: number): SettingsSt
           // shared/group folders, so enable shared inclusion for every migrated
           // configuration (matches the new-install default).
           state.includeGroupInUnified = true;
+        }
+        if (version < 8) {
+          state.imageAttachmentOptimizationEnabled = true;
+          state.imageAttachmentQuality = 78;
+          state.imageAttachmentOutputFormat = 'webp';
+          state.imageAttachmentMaxDimension = 1200;
         }
         // Per-account default-identity map (issue #507). Coerce any
         // missing/legacy value to an empty record. Guarded at <6 so users who

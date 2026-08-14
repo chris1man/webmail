@@ -17,7 +17,9 @@ describe('image attachment optimizer', () => {
     expect(isOptimizableImageAttachment({ type: 'image/svg+xml' })).toBe(false);
   });
 
-  it('uses a webp filename for converted images', () => {
+  it('uses a filename matching the chosen output format', () => {
     expect(optimizedImageName('scan.JPG')).toBe('scan.webp');
+    expect(optimizedImageName('scan.png', 'image/jpeg')).toBe('scan.jpg');
+    expect(optimizedImageName('scan.jpg', 'image/png')).toBe('scan.png');
   });
 });

@@ -290,6 +290,10 @@ export function EmailComposer({
   const autoSelectReplyIdentity = useSettingsStore((state) => state.autoSelectReplyIdentity);
   const attachmentReminderEnabled = useSettingsStore((state) => state.attachmentReminderEnabled);
   const attachmentReminderKeywords = useSettingsStore((state) => state.attachmentReminderKeywords);
+  const imageAttachmentOptimizationEnabledByUser = useSettingsStore((state) => state.imageAttachmentOptimizationEnabled);
+  const imageAttachmentQuality = useSettingsStore((state) => state.imageAttachmentQuality);
+  const imageAttachmentOutputFormat = useSettingsStore((state) => state.imageAttachmentOutputFormat);
+  const imageAttachmentMaxDimension = useSettingsStore((state) => state.imageAttachmentMaxDimension);
   const { mailSizeWarningMb, mailSizeBlockMb, imageAttachmentOptimizationEnabled } = useConfig();
   // Every ordinary send is held briefly to make Undo Send reliable. Explicit
   // schedule-send dates still take precedence in resolveDelayedUntil().
@@ -1292,8 +1296,12 @@ export function EmailComposer({
     if (allowedFiles.length === 0) return;
     files = allowedFiles;
 
-    const uploadFiles = imageAttachmentOptimizationEnabled
-      ? await Promise.all(files.map((file) => optimizeImageAttachment(file)))
+    const uploadFiles = imageAttachmentOptimizationEnabled && imageAttachmentOptimizationEnabledByUser
+      ? await Promise.all(files.map((file) => optimizeImageAttachment(file, {
+          quality: imageAttachmentQuality,
+          outputFormat: imageAttachmentOutputFormat,
+          maxDimension: imageAttachmentMaxDimension,
+        })))
       : files;
 
     const newAttachments: ComposerAttachment[] = uploadFiles.map(file => {
@@ -1353,7 +1361,7 @@ export function EmailComposer({
         );
       }
     }
-  }, [client, imageAttachmentOptimizationEnabled, t]);
+  }, [client, imageAttachmentMaxDimension, imageAttachmentOptimizationEnabled, imageAttachmentOptimizationEnabledByUser, imageAttachmentOutputFormat, imageAttachmentQuality, t]);
 
   const handleImageUpload = useCallback(async (
     file: File,
