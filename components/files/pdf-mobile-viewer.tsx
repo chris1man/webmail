@@ -80,7 +80,8 @@ export function PdfMobileViewer({ url }: { url: string }) {
 
           const pageHost = document.createElement("div");
           pageHost.className = "relative mx-auto mb-2 bg-white shadow-sm";
-          pageHost.style.width = "100%";
+          pageHost.style.width = `${viewport.width}px`;
+          pageHost.style.height = `${viewport.height}px`;
           const canvas = document.createElement("canvas");
           canvas.width = Math.floor(renderViewport.width);
           canvas.height = Math.floor(renderViewport.height);

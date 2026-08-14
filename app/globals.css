@@ -825,3 +825,24 @@ body {
 [dir="rtl"] .lucide-panel-right {
   transform: scaleX(-1);
 }
+/* PDF.js keeps selectable text in an invisible DOM layer above the canvas.
+   Do not simplify these rules: its spans need absolute positioning to match
+   the PDF glyph coordinates rather than reflowing as ordinary HTML text. */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+}
+.textLayer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+}
+.textLayer ::selection { background: rgba(59, 130, 246, 0.35); }
