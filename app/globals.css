@@ -825,3 +825,10 @@ body {
 [dir="rtl"] .lucide-panel-right {
   transform: scaleX(-1);
 }
+
+/* PDF annotations are positioned rectangles over the text layer. Let the
+   text layer receive pointer input so a link can be selected precisely. The
+   viewer opens a matching link itself for an unambiguous short click. */
+.pdfViewer .annotationLayer .linkAnnotation {
+  pointer-events: none;
+}

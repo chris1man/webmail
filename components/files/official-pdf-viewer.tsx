@@ -40,9 +40,32 @@ export function OfficialPdfViewer({ url }: { url: string }) {
       bus.on("pagesinit", () => { viewer.currentScaleValue = "page-width"; });
       bus.on("scalechanging", (event: { presetValue?: string; scale: number }) => setScale(event.presetValue || `${Math.round(event.scale * 100)}%`));
       bus.on("pagechanging", (event: { pageNumber: number }) => setPage(event.pageNumber));
+      // Annotation rectangles can be marginally larger than their glyphs and
+      // otherwise intercept a drag before the text layer can start selecting.
+      // With their pointer events disabled in CSS, dispatch a real click only
+      // when the user has not made a text selection.
+      const openLinkOnClick = (event: MouseEvent) => {
+        if (!event.isTrusted) return;
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) return;
+        const target = event.target instanceof Element ? event.target : null;
+        const pageElement = target?.closest(".page");
+        const link = Array.from(pageElement?.querySelectorAll<HTMLAnchorElement>(".linkAnnotation > a") ?? []).find((anchor) => {
+          const rect = anchor.getBoundingClientRect();
+          return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+        });
+        if (link) link.click();
+      };
+      containerRef.current.addEventListener("click", openLinkOnClick);
       setLoading(false);
-    })().catch((reason) => { console.error("Official PDF.js viewer failed:", reason); setError(true); setLoading(false); });
-    return () => { cancelled = true; apiRef.current?.viewer.cleanup(); void apiRef.current?.task.destroy(); apiRef.current = null; };
+      return () => containerRef.current?.removeEventListener("click", openLinkOnClick);
+    })().then((dispose) => {
+      if (!dispose) return;
+      const previousCleanup = cleanup;
+      cleanup = () => { dispose(); previousCleanup?.(); };
+    }).catch((reason) => { console.error("Official PDF.js viewer failed:", reason); setError(true); setLoading(false); });
+    let cleanup: (() => void) | undefined;
+    return () => { cancelled = true; cleanup?.(); apiRef.current?.viewer.cleanup(); void apiRef.current?.task.destroy(); apiRef.current = null; };
   }, [url]);
   const change = (next: string) => { const viewer = apiRef.current?.viewer; if (viewer) viewer.currentScaleValue = next; };
   const find = (previous = false) => apiRef.current?.bus.dispatch("find", { source: null, type: previous ? "findprevious" : "again", query, phraseSearch: true, caseSensitive: false, entireWord: false, highlightAll: true, findPrevious: previous });
