@@ -212,32 +212,48 @@ export function ComposingSettings() {
         <ToggleSwitch checked={imageAttachmentOptimizationEnabled} onChange={(checked) => updateSetting('imageAttachmentOptimizationEnabled', checked)} />
       </SettingItem>
       {imageAttachmentOptimizationEnabled && (
-        <div className="space-y-3 border-b border-border py-3">
-          <SettingItem label="Качество сжатия" description="Большее значение даёт лучшее качество и больший размер.">
-            <div className="flex items-center gap-2">
-              <input type="range" min="40" max="95" step="1" value={imageAttachmentQuality} onChange={(event) => updateSetting('imageAttachmentQuality', Number(event.target.value))} className="w-28" aria-label="Качество сжатия изображений" />
-              <span className="w-9 text-right text-sm tabular-nums">{imageAttachmentQuality}</span>
+        <section className="space-y-4 rounded-lg border border-border bg-muted/20 p-4" aria-label="Параметры сжатия изображений">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h4 className="text-sm font-semibold text-foreground">Параметры сжатия</h4>
+              <p className="mt-1 text-xs text-muted-foreground">Настройки применяются к новым вложениям перед загрузкой.</p>
             </div>
-          </SettingItem>
-          <SettingItem label="Формат результата" description="PNG в режиме «Сохранить формат» сжимается без смены типа файла.">
-            <Select value={imageAttachmentOutputFormat} onChange={(value) => updateSetting('imageAttachmentOutputFormat', value as 'webp' | 'jpeg' | 'preserve')} options={[
-              { value: 'webp', label: 'Все в WebP' },
-              { value: 'jpeg', label: 'Все в JPEG' },
-              { value: 'preserve', label: 'Сохранить формат (PNG — без конвертации)' },
-            ]} />
-          </SettingItem>
-          <SettingItem label="Максимальная длинная сторона" description="Изображения больше этого значения уменьшаются пропорционально.">
-            <div className="flex items-center gap-2">
-              <input type="number" min="320" max="6000" step="100" value={imageAttachmentMaxDimension} onChange={(event) => updateSetting('imageAttachmentMaxDimension', Math.max(320, Math.min(6000, Number(event.target.value) || IMAGE_ATTACHMENT_MAX_DIMENSION)))} className="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm" aria-label="Максимальная длинная сторона изображения" />
-              <span className="text-sm text-muted-foreground">px</span>
-              <button type="button" onClick={() => {
-                updateSetting('imageAttachmentQuality', DEFAULT_IMAGE_ATTACHMENT_QUALITY);
-                updateSetting('imageAttachmentOutputFormat', 'webp');
-                updateSetting('imageAttachmentMaxDimension', IMAGE_ATTACHMENT_MAX_DIMENSION);
-              }} className="rounded-md bg-muted px-2.5 py-1.5 text-xs hover:bg-accent">Сбросить</button>
+            <button type="button" onClick={() => {
+              updateSetting('imageAttachmentOptimizationEnabled', true);
+              updateSetting('imageAttachmentQuality', DEFAULT_IMAGE_ATTACHMENT_QUALITY);
+              updateSetting('imageAttachmentOutputFormat', 'webp');
+              updateSetting('imageAttachmentMaxDimension', IMAGE_ATTACHMENT_MAX_DIMENSION);
+            }} className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 sm:w-auto">Сбросить все настройки по умолчанию</button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="text-sm font-medium text-foreground">Качество сжатия</label>
+              <p className="mt-1 text-xs text-muted-foreground">Больше качество — больше размер.</p>
+              <div className="mt-3 flex items-center gap-2">
+                <input type="range" min="40" max="95" step="1" value={imageAttachmentQuality} onChange={(event) => updateSetting('imageAttachmentQuality', Number(event.target.value))} className="w-28 accent-[#3b82f6]" aria-label="Качество сжатия изображений" />
+                <span className="w-9 text-right text-sm tabular-nums">{imageAttachmentQuality}</span>
+              </div>
             </div>
-          </SettingItem>
-        </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Формат результата</label>
+              <p className="mt-1 text-xs text-muted-foreground">Выберите, менять ли тип изображения.</p>
+              <div className="mt-3"><Select value={imageAttachmentOutputFormat} onChange={(value) => updateSetting('imageAttachmentOutputFormat', value as 'webp' | 'jpeg' | 'preserve')} options={[
+                { value: 'webp', label: 'Все в WebP' },
+                { value: 'jpeg', label: 'Все в JPEG' },
+                { value: 'preserve', label: 'Все в исходных форматах' },
+              ]} /></div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">Максимальная длинная сторона</label>
+              <p className="mt-1 text-xs text-muted-foreground">Большие изображения уменьшаются пропорционально.</p>
+              <div className="mt-3 flex items-center gap-2">
+                <input type="number" min="320" max="6000" step="100" value={imageAttachmentMaxDimension} onChange={(event) => updateSetting('imageAttachmentMaxDimension', Math.max(320, Math.min(6000, Number(event.target.value) || IMAGE_ATTACHMENT_MAX_DIMENSION)))} className="w-20 rounded-md border border-border bg-background px-2 py-1.5 text-sm" aria-label="Максимальная длинная сторона изображения" />
+                <span className="text-sm text-muted-foreground">px</span>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">В режиме «Все в исходных форматах» JPEG, PNG и WebP сжимаются без смены типа. Форматы, которые браузер не умеет безопасно перекодировать (например, HEIC), прикладываются как есть.</p>
+        </section>
       )}
     </SettingsSection>
   );
