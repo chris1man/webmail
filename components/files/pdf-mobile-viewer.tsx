@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Loader2, ExternalLink } from "lucide-react";
+import { Loader2, ExternalLink, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 // Real inline PDF preview for mobile browsers. Android Chrome / iOS WebKit have
@@ -31,6 +31,8 @@ export function PdfMobileViewer({ url }: { url: string }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const zoom = useRef({ step: 0, scale: 1 });
+  const applyZoomRef = useRef<(target: number) => void>(() => {});
+  const [zoomPercent, setZoomPercent] = useState(100);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const t = useTranslations("files");
 
@@ -71,6 +73,9 @@ export function PdfMobileViewer({ url }: { url: string }) {
           if (area > MAX_CANVAS_AREA) scale *= Math.sqrt(MAX_CANVAS_AREA / area);
           const viewport = page.getViewport({ scale });
 
+          const pageHost = document.createElement("div");
+          pageHost.className = "relative mx-auto mb-2 bg-white shadow-sm";
+          pageHost.style.width = "100%";
           const canvas = document.createElement("canvas");
           canvas.width = Math.floor(viewport.width);
           canvas.height = Math.floor(viewport.height);
@@ -79,8 +84,31 @@ export function PdfMobileViewer({ url }: { url: string }) {
           canvas.style.display = "block";
           canvas.style.margin = "0 auto 8px";
           canvas.style.background = "#fff";
-          pages.appendChild(canvas);
+          pageHost.appendChild(canvas);
+          // PDF.js text layer keeps the visual canvas while restoring native
+          // selection/copy behaviour. Links are added separately below.
+          const textLayer = document.createElement("div");
+          textLayer.className = "absolute inset-0 textLayer";
+          textLayer.style.userSelect = "text";
+          pageHost.appendChild(textLayer);
+          pages.appendChild(pageHost);
           await page.render({ canvas, viewport }).promise;
+          const textContent = await page.getTextContent();
+          const TextLayer = (pdfjs as unknown as { TextLayer?: new (options: { textContentSource: unknown; container: HTMLDivElement; viewport: typeof viewport }) => { render: () => Promise<void> } }).TextLayer;
+          if (TextLayer) await new TextLayer({ textContentSource: textContent, container: textLayer, viewport }).render();
+          const annotations = await page.getAnnotations();
+          for (const annotation of annotations) {
+            if (annotation.subtype !== "Link" || !annotation.url) continue;
+            const rect = viewport.convertToViewportRectangle(annotation.rect);
+            const left = Math.min(rect[0], rect[2]); const top = Math.min(rect[1], rect[3]);
+            const link = document.createElement("a");
+            link.href = annotation.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+            link.className = "absolute z-10 rounded-sm outline-none hover:ring-2 hover:ring-primary/60";
+            link.style.left = `${left}px`; link.style.top = `${top}px`;
+            link.style.width = `${Math.abs(rect[0] - rect[2])}px`; link.style.height = `${Math.abs(rect[1] - rect[3])}px`;
+            link.setAttribute("aria-label", "Открыть ссылку из документа");
+            pageHost.appendChild(link);
+          }
         }
         if (!cancelled) setStatus("ready");
       } catch {
@@ -120,7 +148,9 @@ export function PdfMobileViewer({ url }: { url: string }) {
       root.scrollLeft = (root.scrollLeft + cx) * ratio - cx;
       root.scrollTop = (root.scrollTop + cy) * ratio - cy;
       zoom.current.scale = next;
+      setZoomPercent(Math.round(next * 100));
     };
+    applyZoomRef.current = (target) => applyZoom(target, root.clientWidth / 2, root.clientHeight / 2);
 
     let lastTap = 0;
     let lastX = 0;
@@ -184,6 +214,7 @@ export function PdfMobileViewer({ url }: { url: string }) {
     root.addEventListener("touchmove", onMove, { passive: false });
     root.addEventListener("touchend", onEnd, { passive: false });
     return () => {
+      applyZoomRef.current = () => {};
       root.removeEventListener("touchstart", onStart);
       root.removeEventListener("touchmove", onMove);
       root.removeEventListener("touchend", onEnd);
@@ -191,6 +222,13 @@ export function PdfMobileViewer({ url }: { url: string }) {
   }, []);
 
   return (
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center justify-center gap-1 border-b border-border bg-background p-1.5">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => applyZoomRef.current(zoom.current.scale - 0.25)} aria-label="Уменьшить масштаб"><ZoomOut className="h-4 w-4" /></Button>
+        <span className="min-w-12 text-center text-xs tabular-nums">{zoomPercent}%</span>
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => applyZoomRef.current(zoom.current.scale + 0.25)} aria-label="Увеличить масштаб"><ZoomIn className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => applyZoomRef.current(1)}><Maximize2 className="h-3.5 w-3.5" />По ширине</Button>
+      </div>
     <div
       ref={rootRef}
       className="w-full h-full overflow-auto"
@@ -218,6 +256,6 @@ export function PdfMobileViewer({ url }: { url: string }) {
         </div>
       )}
       <div ref={pagesRef} className="w-full" />
-    </div>
+    </div></div>
   );
 }
