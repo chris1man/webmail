@@ -68,19 +68,24 @@ export function PdfMobileViewer({ url }: { url: string }) {
           if (cancelled) return;
           const page = await doc.getPage(n);
           const baseVp = page.getViewport({ scale: 1 });
-          let scale = (cssWidth / baseVp.width) * dpr;
-          const area = baseVp.width * scale * (baseVp.height * scale);
-          if (area > MAX_CANVAS_AREA) scale *= Math.sqrt(MAX_CANVAS_AREA / area);
-          const viewport = page.getViewport({ scale });
+          const cssScale = cssWidth / baseVp.width;
+          // Keep the DOM/text layer in CSS pixels. The canvas alone receives
+          // the device-pixel-ratio boost; mixing those coordinate systems was
+          // the cause of the duplicated, offset text layer.
+          let renderScale = cssScale * dpr;
+          const area = baseVp.width * renderScale * (baseVp.height * renderScale);
+          if (area > MAX_CANVAS_AREA) renderScale *= Math.sqrt(MAX_CANVAS_AREA / area);
+          const viewport = page.getViewport({ scale: cssScale });
+          const renderViewport = page.getViewport({ scale: renderScale });
 
           const pageHost = document.createElement("div");
           pageHost.className = "relative mx-auto mb-2 bg-white shadow-sm";
           pageHost.style.width = "100%";
           const canvas = document.createElement("canvas");
-          canvas.width = Math.floor(viewport.width);
-          canvas.height = Math.floor(viewport.height);
-          canvas.style.width = "100%";
-          canvas.style.height = "auto";
+          canvas.width = Math.floor(renderViewport.width);
+          canvas.height = Math.floor(renderViewport.height);
+          canvas.style.width = `${viewport.width}px`;
+          canvas.style.height = `${viewport.height}px`;
           canvas.style.display = "block";
           canvas.style.margin = "0 auto 8px";
           canvas.style.background = "#fff";
@@ -90,9 +95,11 @@ export function PdfMobileViewer({ url }: { url: string }) {
           const textLayer = document.createElement("div");
           textLayer.className = "absolute inset-0 textLayer";
           textLayer.style.userSelect = "text";
+          textLayer.style.color = "transparent";
+          textLayer.style.overflow = "hidden";
           pageHost.appendChild(textLayer);
           pages.appendChild(pageHost);
-          await page.render({ canvas, viewport }).promise;
+          await page.render({ canvas, viewport: renderViewport }).promise;
           const textContent = await page.getTextContent();
           const TextLayer = (pdfjs as unknown as { TextLayer?: new (options: { textContentSource: unknown; container: HTMLDivElement; viewport: typeof viewport }) => { render: () => Promise<void> } }).TextLayer;
           if (TextLayer) await new TextLayer({ textContentSource: textContent, container: textLayer, viewport }).render();
