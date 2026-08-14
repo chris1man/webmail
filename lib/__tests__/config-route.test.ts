@@ -46,6 +46,8 @@ describe('config API route', () => {
     delete process.env.LOGIN_PRIVACY_POLICY_URL;
     delete process.env.LOGIN_WEBSITE_URL;
     delete process.env.DOMAIN_BRANDING;
+    delete process.env.MAIL_SIZE_WARNING_MB;
+    delete process.env.MAIL_SIZE_BLOCK_MB;
   });
 
   afterEach(() => {
@@ -90,6 +92,8 @@ describe('config API route', () => {
     expect(config.faviconUrl).toBe('/branding/Bulwark_Favicon.svg');
     expect(config.appLogoLightUrl).toBe('');
     expect(config.appLogoDarkUrl).toBe('');
+    expect(config.mailSizeWarningMb).toBe(20);
+    expect(config.mailSizeBlockMb).toBe(25);
   });
 
   it('should use runtime env vars over defaults', async () => {
@@ -100,6 +104,14 @@ describe('config API route', () => {
 
     expect(config.appName).toBe('My Mail');
     expect(config.jmapServerUrl).toBe('https://mail.example.com');
+  });
+
+  it('exposes configured MIME size thresholds', async () => {
+    process.env.MAIL_SIZE_WARNING_MB = '18';
+    process.env.MAIL_SIZE_BLOCK_MB = '24';
+    const config = await getConfig();
+    expect(config.mailSizeWarningMb).toBe(18);
+    expect(config.mailSizeBlockMb).toBe(24);
   });
 
   it('should fall back to NEXT_PUBLIC_ vars when runtime vars are unset', async () => {

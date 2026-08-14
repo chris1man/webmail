@@ -39,6 +39,9 @@ interface ConfigData {
   jmapServerAutoPickByDomain: boolean;
   embeddedMode: boolean;
   parentOrigin: string;
+  mailSizeWarningMb: number;
+  mailSizeBlockMb: number;
+  imageAttachmentOptimizationEnabled: boolean;
 }
 
 interface AppConfig extends ConfigData {
@@ -124,6 +127,9 @@ export function useConfig(): AppConfig {
     jmapServerAutoPickByDomain: configCache?.jmapServerAutoPickByDomain || false,
     embeddedMode: configCache?.embeddedMode || false,
     parentOrigin: configCache?.parentOrigin || '',
+    mailSizeWarningMb: configCache?.mailSizeWarningMb || 20,
+    mailSizeBlockMb: configCache?.mailSizeBlockMb || 25,
+    imageAttachmentOptimizationEnabled: configCache?.imageAttachmentOptimizationEnabled ?? true,
     isLoading: !configCache,
     error: null,
   });
@@ -165,6 +171,9 @@ export function useConfig(): AppConfig {
         jmapServerAutoPickByDomain: configCache.jmapServerAutoPickByDomain || false,
         embeddedMode: configCache.embeddedMode,
         parentOrigin: configCache.parentOrigin,
+        mailSizeWarningMb: configCache.mailSizeWarningMb,
+        mailSizeBlockMb: configCache.mailSizeBlockMb,
+        imageAttachmentOptimizationEnabled: configCache.imageAttachmentOptimizationEnabled,
         isLoading: false,
         error: null,
       });
@@ -207,6 +216,9 @@ export function useConfig(): AppConfig {
           jmapServerAutoPickByDomain: data.jmapServerAutoPickByDomain || false,
           embeddedMode: data.embeddedMode,
           parentOrigin: data.parentOrigin,
+          mailSizeWarningMb: data.mailSizeWarningMb,
+          mailSizeBlockMb: data.mailSizeBlockMb,
+          imageAttachmentOptimizationEnabled: data.imageAttachmentOptimizationEnabled,
           isLoading: false,
           error: null,
         });

@@ -62,6 +62,9 @@ import type { Editor } from "@tiptap/react";
 import { htmlToPlainText as htmlToPlainTextShared } from "@/lib/html-to-text";
 import { fileStorage } from "@/lib/plugin-storage";
 import { usePolicyStore } from "@/stores/policy-store";
+import { useConfig } from "@/hooks/use-config";
+import { estimateMimeSize, mimeSizeRisk, type MimeSizeEstimate } from "@/lib/mime-size";
+import { optimizeImageAttachment } from "@/lib/image-attachment-optimizer";
 
 /**
  * Derives the text/plain alternative from the composer's HTML body, preserving
@@ -287,6 +290,7 @@ export function EmailComposer({
   const autoSelectReplyIdentity = useSettingsStore((state) => state.autoSelectReplyIdentity);
   const attachmentReminderEnabled = useSettingsStore((state) => state.attachmentReminderEnabled);
   const attachmentReminderKeywords = useSettingsStore((state) => state.attachmentReminderKeywords);
+  const { mailSizeWarningMb, mailSizeBlockMb, imageAttachmentOptimizationEnabled } = useConfig();
   // Every ordinary send is held briefly to make Undo Send reliable. Explicit
   // schedule-send dates still take precedence in resolveDelayedUntil().
   const sendDelaySeconds = 15;
@@ -565,6 +569,7 @@ export function EmailComposer({
   const [showAttachmentWarning, setShowAttachmentWarning] = useState(false);
   const [attachmentWarningKeyword, setAttachmentWarningKeyword] = useState('');
   const [attachmentWarningDelayedUntil, setAttachmentWarningDelayedUntil] = useState<string | undefined>();
+  const [mimeSizeDialog, setMimeSizeDialog] = useState<{ estimate: MimeSizeEstimate; risk: 'warning' | 'blocked'; delayedUntil?: string; skipAttachmentCheck: boolean } | null>(null);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleValue, setScheduleValue] = useState('');
   const [scheduleError, setScheduleError] = useState('');
@@ -586,6 +591,11 @@ export function EmailComposer({
   const attachmentWarningRef = useFocusTrap({
     isActive: showAttachmentWarning,
     onEscape: () => setShowAttachmentWarning(false),
+    restoreFocus: true,
+  });
+  const mimeSizeDialogRef = useFocusTrap({
+    isActive: !!mimeSizeDialog,
+    onEscape: () => setMimeSizeDialog(null),
     restoreFocus: true,
   });
 
@@ -1282,7 +1292,11 @@ export function EmailComposer({
     if (allowedFiles.length === 0) return;
     files = allowedFiles;
 
-    const newAttachments: ComposerAttachment[] = files.map(file => {
+    const uploadFiles = imageAttachmentOptimizationEnabled
+      ? await Promise.all(files.map((file) => optimizeImageAttachment(file)))
+      : files;
+
+    const newAttachments: ComposerAttachment[] = uploadFiles.map(file => {
       const controller = new AbortController();
       return {
         file,
@@ -1295,8 +1309,8 @@ export function EmailComposer({
     });
     setAttachments(prev => [...prev, ...newAttachments]);
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const file = uploadFiles[i];
       const controller = newAttachments[i].abortController;
       try {
         if (controller?.signal.aborted) continue;
@@ -1339,7 +1353,7 @@ export function EmailComposer({
         );
       }
     }
-  }, [client, t]);
+  }, [client, imageAttachmentOptimizationEnabled, t]);
 
   const handleImageUpload = useCallback(async (
     file: File,
@@ -1765,7 +1779,7 @@ export function EmailComposer({
   const [isWaitingForUploads, setIsWaitingForUploads] = useState(false);
   const sendCancelledRef = useRef(false);
 
-  const handleSend = async (skipAttachmentCheck = false, delayedUntil?: string) => {
+  const handleSend = async (skipAttachmentCheck = false, delayedUntil?: string, skipSizeWarning = false) => {
     if (isSendingRef.current) return;
 
     if (attachmentsRef.current.some(att => att.uploading)) {
@@ -1923,6 +1937,22 @@ export function EmailComposer({
         .filter((attachment) => attachment.blobId && !attachment.uploading && !attachment.error)
         .map((attachment) => attachment.name),
     });
+
+    const estimatedMime = estimateMimeSize({
+      attachments: [
+        ...attachmentsRef.current.filter(att => att.blobId && !att.uploading && !att.error),
+        ...inlineAttachments,
+      ],
+      textBody: finalBody,
+      htmlBody: finalHtmlBody,
+      recipientCount: toAddresses.length + ccAddresses.length + bccAddresses.length,
+      subject: outgoingSubject,
+    });
+    const sizeRisk = mimeSizeRisk(estimatedMime.totalBytes, mailSizeWarningMb, mailSizeBlockMb);
+    if (!skipSizeWarning && sizeRisk !== 'ok') {
+      setMimeSizeDialog({ estimate: estimatedMime, risk: sizeRisk, delayedUntil, skipAttachmentCheck });
+      return;
+    }
 
     try {
       const effectiveDelayedUntil = await resolveDelayedUntil(delayedUntil);
@@ -2701,6 +2731,16 @@ export function EmailComposer({
                   </button>
                 )}
               </div>
+              {(() => {
+                const estimate = estimateMimeSize({ attachments, textBody: plainTextMode ? body : htmlToPlainText(body), htmlBody: plainTextMode ? '' : body, subject, recipientCount: toAddresses.length + cc.length + bcc.length });
+                const risk = mimeSizeRisk(estimate.totalBytes, mailSizeWarningMb, mailSizeBlockMb);
+                return (
+                  <div className={cn('mt-2 text-xs', risk === 'blocked' ? 'text-destructive' : risk === 'warning' ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>
+                    Файлы: {formatFileSize(estimate.attachmentBytes)} · предполагаемый размер письма: {formatFileSize(estimate.totalBytes)}
+                    {risk !== 'ok' && ` · ${risk === 'blocked' ? `прямая отправка от ${mailSizeBlockMb} MB заблокирована` : `от ${mailSizeWarningMb} MB отдельные почтовые сервисы могут отклонить письмо`}`}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -2964,6 +3004,48 @@ export function EmailComposer({
               <Button onClick={() => { setShowAttachmentWarning(false); handleSend(true, attachmentWarningDelayedUntil); setAttachmentWarningDelayedUntil(undefined); }}>
                 {t('forgot_attachment.send_anyway')}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mimeSizeDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[1px] animate-in fade-in duration-150" onClick={() => setMimeSizeDialog(null)}>
+          <div ref={mimeSizeDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="mime-size-title" onClick={(event) => event.stopPropagation()} className="w-full max-w-md rounded-lg border border-border bg-background shadow-xl animate-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h2 id="mime-size-title" className="text-lg font-semibold text-foreground">
+                {mimeSizeDialog.risk === 'blocked' ? 'Письмо слишком большое для отправки' : 'Большое письмо может не дойти'}
+              </h2>
+              <div className="mt-3 space-y-1 text-sm text-muted-foreground">
+                <p>Размер файлов: <strong className="text-foreground">{formatFileSize(mimeSizeDialog.estimate.attachmentBytes)}</strong></p>
+                <p>Предполагаемый размер MIME-письма: <strong className="text-foreground">{formatFileSize(mimeSizeDialog.estimate.totalBytes)}</strong></p>
+              </div>
+              <p className="mt-4 text-sm text-muted-foreground">
+                Вложения кодируются Base64 и вместе с заголовками становятся больше. {mimeSizeDialog.risk === 'blocked'
+                  ? `Прямая отправка от ${mailSizeBlockMb} MB отключена: некоторые получатели, включая Mail.ru, отклоняют такие письма.`
+                  : `От ${mailSizeWarningMb} MB некоторые почтовые сервисы могут отклонить письмо.`}
+              </p>
+              <p className="mt-3 text-xs text-muted-foreground">Уменьшите вложения или сохраните письмо в черновиках. В дальнейшем здесь можно подключить файловое хранилище и отправку ссылками.</p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 px-6 pb-6">
+              <Button variant="outline" onClick={() => setMimeSizeDialog(null)}>Вернуться к редактированию</Button>
+              <Button variant="outline" onClick={async () => {
+                const savedDraftId = await saveDraft();
+                if (savedDraftId) {
+                  await onDraftSaved?.(savedDraftId);
+                  setMimeSizeDialog(null);
+                  toast.success(t('draft_saved'));
+                } else {
+                  toast.error(t('save_failed'));
+                }
+              }}><Save className="mr-1.5 h-4 w-4" />Сохранить в черновики</Button>
+              {mimeSizeDialog.risk === 'warning' && (
+                <Button onClick={() => {
+                  const delayed = mimeSizeDialog.delayedUntil;
+                  setMimeSizeDialog(null);
+                  void handleSend(mimeSizeDialog.skipAttachmentCheck, delayed, true);
+                }}>Отправить всё равно</Button>
+              )}
             </div>
           </div>
         </div>

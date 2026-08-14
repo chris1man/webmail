@@ -133,6 +133,8 @@ interface EmailViewerProps {
   onRescheduleScheduled?: (delayedUntil: string) => void;
   onCompose?: () => void;
   onComposeToRecipient?: (email: string) => void;
+  /** Opens the original message referenced by a DSN, when it is available locally. */
+  onOpenRelatedMessage?: (messageIds: string[]) => void;
   currentUserEmail?: string;
   currentUserName?: string;
   currentMailboxRole?: string;
@@ -701,6 +703,7 @@ export function EmailViewer({
   onRescheduleScheduled,
   onCompose,
   onComposeToRecipient,
+  onOpenRelatedMessage,
   currentUserEmail,
   currentUserName,
   currentMailboxRole,
@@ -765,6 +768,16 @@ export function EmailViewer({
   const isDraft = email?.keywords?.['$draft'] === true;
   const isScheduled = email?.isScheduled === true;
   const canCancelScheduled = isScheduled && email?.scheduledUndoStatus === 'pending';
+  const sizeBounce = useMemo(() => {
+    if (!email) return false;
+    const source = [
+      email.subject,
+      email.preview,
+      ...Object.values(email.bodyValues ?? {}).map((part) => part.value),
+    ].filter(Boolean).join('\n').toLowerCase();
+    return source.includes('max body limit reached');
+  }, [email]);
+  const relatedMessageIds = useMemo(() => Array.from(new Set([...(email?.inReplyTo ?? []), ...(email?.references ?? [])])), [email?.inReplyTo, email?.references]);
 
   // Color options for email tags (from user-defined keyword settings)
   const colorOptions = emailKeywords.map((kw) => ({
@@ -3730,6 +3743,20 @@ export function EmailViewer({
           </div>
         </div>
       </div>
+
+      {sizeBounce && (
+        <div className="border-b border-destructive/25 bg-destructive/10 px-4 py-3 lg:px-6" role="alert">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Доставка не удалась: сервер получателя отклонил письмо из-за слишком большого размера.</span>
+            {relatedMessageIds.length > 0 && onOpenRelatedMessage && (
+              <Button size="sm" variant="outline" className="border-destructive/35 bg-background text-foreground" onClick={() => onOpenRelatedMessage(relatedMessageIds)}>
+                Открыть исходное письмо
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* === TOOLBAR (below-subject position) === */}
       {toolbarPosition === 'below-subject' && (

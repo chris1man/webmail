@@ -10,6 +10,7 @@ import {
   pickRequestHost,
   type BrandingOverrideKey,
 } from '@/lib/admin/domain-branding';
+import { DEFAULT_MIME_SIZE_BLOCK_MB, DEFAULT_MIME_SIZE_WARNING_MB, parseMimeSizeThreshold } from '@/lib/mime-size';
 
 /**
  * Runtime configuration endpoint
@@ -51,6 +52,9 @@ export async function GET(request: NextRequest) {
   const oauthOnly = oauthEnabled && configManager.get<boolean>('oauthOnly', false);
   const stalwartFeaturesEnabled = configManager.get<boolean>('stalwartFeaturesEnabled', true);
   const allowedFrameAncestors = configManager.get<string>('allowedFrameAncestors', '');
+  const mailSizeWarningMb = parseMimeSizeThreshold(process.env.MAIL_SIZE_WARNING_MB, DEFAULT_MIME_SIZE_WARNING_MB);
+  const mailSizeBlockMb = Math.max(mailSizeWarningMb, parseMimeSizeThreshold(process.env.MAIL_SIZE_BLOCK_MB, DEFAULT_MIME_SIZE_BLOCK_MB));
+  const imageAttachmentOptimizationEnabled = process.env.IMAGE_ATTACHMENT_OPTIMIZATION_ENABLED !== 'false';
 
   return NextResponse.json(
     {
@@ -87,6 +91,9 @@ export async function GET(request: NextRequest) {
       autoSsoEnabled: configManager.get<boolean>('autoSsoEnabled', false),
       embeddedMode: !!allowedFrameAncestors && allowedFrameAncestors !== "'none'",
       parentOrigin: configManager.get<string>('parentOrigin', ''),
+      mailSizeWarningMb,
+      mailSizeBlockMb,
+      imageAttachmentOptimizationEnabled,
     },
     {
       // Branding varies by host, so any cache between us and the browser

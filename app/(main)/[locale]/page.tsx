@@ -3520,6 +3520,14 @@ export default function Home() {
                       setShowComposer(true);
                     }}
                     onComposeToRecipient={handleComposeToRecipient}
+                    onOpenRelatedMessage={(messageIds) => {
+                      const related = emails.find((candidate) => candidate.messageId && messageIds.includes(candidate.messageId));
+                      if (related) {
+                        selectEmail(related);
+                      } else {
+                        toast.error('Исходное письмо не найдено среди загруженных сообщений. Откройте его в папке «Отправленные» или «Черновики».');
+                      }
+                    }}
                     currentUserEmail={client?.getUsername()}
                     currentUserName={client?.getUsername()?.split("@")[0]}
                     currentMailboxRole={mailboxes.find(m => m.id === selectedMailbox)?.role ?? (isUnifiedView ? (unifiedRole ?? undefined) : undefined)}
