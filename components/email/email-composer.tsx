@@ -59,7 +59,7 @@ import {
 import { isValidEmail } from "@/lib/validation";
 import { RichTextEditor } from "@/components/email/rich-text-editor";
 import type { Editor } from "@tiptap/react";
-import { htmlToPlainText as htmlToPlainTextShared } from "@/lib/html-to-text";
+import { hasMeaningfulHtmlContent, htmlToPlainText as htmlToPlainTextShared } from "@/lib/html-to-text";
 import { fileStorage } from "@/lib/plugin-storage";
 import { usePolicyStore } from "@/stores/policy-store";
 import { useConfig } from "@/hooks/use-config";
@@ -1682,7 +1682,8 @@ export function EmailComposer({
   // actual member addresses.
   const toAddresses = expandRecipients(withInput(to, toInput));
   const bodyPlainText = plainTextMode ? body.trim() : htmlToPlainText(body).trim();
-  const hasContent = bodyPlainText || attachments.some(att => att.blobId && !att.uploading);
+  const hasRichHtmlContent = !plainTextMode && hasMeaningfulHtmlContent(body);
+  const hasContent = bodyPlainText || hasRichHtmlContent || attachments.some(att => att.blobId && !att.uploading);
   const canSend = toAddresses.length > 0 && hasContent;
 
   const getSendTooltip = (): string | undefined => {
@@ -1932,6 +1933,12 @@ export function EmailComposer({
     const finalBody = plainTextMode
       ? (signatureAlreadyInBody ? body : appendPlainTextSignature(body, signatureIdentity, signatureOpts))
       : (signatureAlreadyInBody ? htmlToPlainText(body) : appendPlainTextSignature(htmlToPlainText(body), signatureIdentity, signatureOpts));
+    // HTML-only structures such as an inline image or a table may have no
+    // extractable text. Keep the visible HTML unchanged, but ensure the
+    // multipart text/plain alternative is non-empty for JMAP servers.
+    const sendTextBody = !plainTextMode && hasRichHtmlContent && !finalBody.trim()
+      ? '.'
+      : finalBody;
 
     const rewritten = plainTextMode ? null : rewriteInlineImages(body);
     const finalHtmlBody = plainTextMode
@@ -1973,7 +1980,7 @@ export function EmailComposer({
         bcc: bccAddresses.map(r => formatRecipient(r.name, r.email)),
         subject: outgoingSubject,
         htmlBody: finalHtmlBody || '',
-        textBody: finalBody,
+        textBody: sendTextBody,
         identityId: currentIdentity?.id || '',
         fromEmail,
         attachments: attachmentsRef.current
@@ -2000,7 +2007,7 @@ export function EmailComposer({
         bcc: bccAddresses.map(r => formatRecipient(r.name, r.email)),
         subject: outgoingSubject,
         htmlBody: finalHtmlBody || '',
-        textBody: finalBody,
+        textBody: sendTextBody,
         identityId: currentIdentity?.id || '',
         fromEmail,
         fromName,
@@ -2038,7 +2045,7 @@ export function EmailComposer({
           bcc: bccAddresses.map(r => formatRecipient(r.name, r.email)),
           subject: outgoingSubject,
           htmlBody: finalHtmlBody || '',
-          textBody: finalBody,
+          textBody: sendTextBody,
           identityId: currentIdentity?.id || '',
           fromEmail,
           attachments: uploadedAttachments.map(a => ({ name: a.name, type: a.type, size: a.size })),

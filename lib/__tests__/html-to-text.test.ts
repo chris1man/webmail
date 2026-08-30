@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { htmlToPlainText } from '../html-to-text';
+import { hasMeaningfulHtmlContent, htmlToPlainText } from '../html-to-text';
 
 describe('htmlToPlainText', () => {
   it('preserves line breaks from <br> within a paragraph', () => {
@@ -49,6 +49,15 @@ describe('htmlToPlainText', () => {
   it('returns an empty string for empty or whitespace-only HTML', () => {
     expect(htmlToPlainText('')).toBe('');
     expect(htmlToPlainText('   <p>  </p>  ')).toBe('');
+  });
+
+  it('recognizes table and inline-image bodies even without text', () => {
+    expect(hasMeaningfulHtmlContent('<table><tr><td></td></tr></table>')).toBe(true);
+    expect(hasMeaningfulHtmlContent('<p><img src="data:image/png;base64,abc" alt="Invoice" /></p>')).toBe(true);
+  });
+
+  it('does not count empty editor markup as message content', () => {
+    expect(hasMeaningfulHtmlContent('<p><br></p>')).toBe(false);
   });
 
   it('handles nested lists as separate lines', () => {

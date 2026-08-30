@@ -162,3 +162,17 @@ export function htmlToPlainText(html: string, options: HtmlToPlainTextOptions = 
   Array.from(document.body.childNodes).forEach(walk);
   return normalizeLineBreaks(chunks.join(''));
 }
+
+/**
+ * Reports visible rich content that may not have a usable text/plain
+ * representation. A table or inline image is still a real message body and
+ * must not leave the composer in its "body required" state.
+ */
+export function hasMeaningfulHtmlContent(html: string): boolean {
+  if (htmlToPlainText(html).trim()) return true;
+
+  const document = parseHtmlSafely(html);
+  return Boolean(document.body.querySelector(
+    'table, img, svg, canvas, video, audio, object, embed, iframe',
+  ));
+}
