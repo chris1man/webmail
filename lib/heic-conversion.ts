@@ -22,6 +22,8 @@ async function convertWithNativeDecoder(input: Buffer): Promise<Buffer> {
 }
 
 export async function convertHeicToJpeg(input: Buffer): Promise<Buffer> {
+  if (input[0] === 0xff && input[1] === 0xd8 && input[2] === 0xff) return input;
+
   try {
     const jpeg = await convert({
       buffer: input,
