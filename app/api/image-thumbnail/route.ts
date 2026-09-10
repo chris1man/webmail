@@ -45,7 +45,8 @@ export async function GET(request: NextRequest) {
       return new NextResponse(null, { status: 502 });
     }
 
-    const source = await fetch(expandDownloadUrl(session.downloadUrl, accountId, blobId, name, type), {
+    const downloadType = isHeicImage(name, type) ? 'application/octet-stream' : type;
+    const source = await fetch(expandDownloadUrl(session.downloadUrl, accountId, blobId, name, downloadType), {
       headers: { Authorization: credentials.authHeader },
     });
     if (!source.ok) {

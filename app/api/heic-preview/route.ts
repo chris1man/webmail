@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
     const session = await fetchJmapSession(credentials.serverUrl, credentials.authHeader);
     if (!session?.downloadUrl) return new NextResponse(null, { status: 502 });
 
-    const source = await fetch(expandDownloadUrl(session.downloadUrl, accountId, blobId, name, type), {
+    const source = await fetch(expandDownloadUrl(session.downloadUrl, accountId, blobId, name, 'application/octet-stream'), {
       headers: { Authorization: credentials.authHeader },
     });
     if (!source.ok) return new NextResponse(null, { status: source.status });
