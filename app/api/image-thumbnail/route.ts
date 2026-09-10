@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
       headers: { Authorization: credentials.authHeader },
     });
     if (!source.ok) {
-      return new NextResponse(null, { status: source.status });
+      console.warn('[image-thumbnail] source download failed', { status: source.status, type: downloadType });
+      return new NextResponse(null, { status: source.status, headers: { 'X-Image-Thumbnail-Stage': 'download' } });
     }
 
     const length = Number(source.headers.get('content-length'));
@@ -77,9 +78,10 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'private, max-age=300',
       },
     });
-  } catch {
+  } catch (error) {
     // Unsupported formats (or a malformed sender attachment) should simply
     // retain the normal file chip rather than breaking email rendering.
-    return new NextResponse(null, { status: 415 });
+    console.warn('[image-thumbnail] conversion failed', error instanceof Error ? error.message : String(error));
+    return new NextResponse(null, { status: 415, headers: { 'X-Image-Thumbnail-Stage': 'conversion' } });
   }
 }
